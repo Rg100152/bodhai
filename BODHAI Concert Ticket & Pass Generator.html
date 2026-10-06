@@ -1,0 +1,2954 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BODHAI — Concert Ticket & Pass Generator</title>
+  
+  <!-- Google Fonts: Inter and JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- QRCode.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  
+  <!-- html2canvas & jsPDF for Client-side Ticket Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Tailwind Configuration with Custom Themes and Fonts -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+            display: ['Outfit', 'sans-serif']
+          },
+          colors: {
+            bodhai: {
+              50: '#f0f5ff',
+              100: '#e0ecff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              cyan: '#06b6d4',
+              neon: '#a855f7',
+              gold: '#f59e0b',
+              dark: '#090d16',
+              surface: '#0f172a',
+              card: '#131d33',
+              border: 'rgba(255, 255, 255, 0.08)'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    /* Laser Scanner Animation for Ticket Verification */
+    @keyframes scanline {
+      0% { top: 0%; opacity: 0.8; }
+      50% { opacity: 1; }
+      100% { top: 100%; opacity: 0.8; }
+    }
+    .laser-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #06b6d4, #a855f7, transparent);
+      box-shadow: 0 0 15px #06b6d4, 0 0 30px #a855f7;
+      animation: scanline 2.2s ease-in-out infinite alternate;
+    }
+
+    /* Realistic Perforated Ticket Notches */
+    .ticket-notch-top, .ticket-notch-bottom {
+      width: 28px;
+      height: 28px;
+      background-color: #090d16;
+      border-radius: 50%;
+      position: absolute;
+      z-index: 20;
+    }
+    .ticket-notch-top {
+      top: -14px;
+      transform: translateX(-50%);
+    }
+    .ticket-notch-bottom {
+      bottom: -14px;
+      transform: translateX(-50%);
+    }
+
+    /* Template Styles */
+    .theme-obsidian {
+      background: linear-gradient(135deg, #090e1a 0%, #111a2e 50%, #0d1322 100%);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: #f8fafc;
+    }
+    .theme-neon {
+      background: linear-gradient(135deg, #050505 0%, #150027 100%);
+      border: 1px solid rgba(168, 85, 247, 0.6);
+      box-shadow: 0 0 25px rgba(168, 85, 247, 0.25);
+      color: #faf5ff;
+    }
+    .theme-gold {
+      background: linear-gradient(135deg, #0d0c0a 0%, #1c1811 100%);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.15);
+      color: #fffbeb;
+    }
+    .theme-festival {
+      background: linear-gradient(135deg, #18092a 0%, #350c33 50%, #09203f 100%);
+      border: 1px solid rgba(236, 72, 153, 0.4);
+      color: #fdf2f8;
+    }
+    .theme-minimal {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      color: #0f172a;
+    }
+    .theme-minimal .text-muted-custom {
+      color: #64748b !important;
+    }
+    .theme-minimal .bg-inner-custom {
+      background-color: #f8fafc !important;
+      border-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+
+    /* Print Specific Styles */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #print-ticket-area, #print-ticket-area * {
+        visibility: visible;
+      }
+      #print-ticket-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: transparent !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-[#090d16] text-slate-100 font-sans antialiased min-h-screen flex flex-col selection:bg-cyan-500 selection:text-black">
+  <div class="flex h-screen overflow-hidden">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-50 w-72 bg-[#0c1322] border-r border-slate-800/80 flex flex-col transition-transform duration-300 transform -translate-x-full lg:translate-x-0">
+      
+      <!-- BODHAI Logo Brand Area -->
+      <div class="h-20 flex items-center px-6 border-b border-slate-800/80 gap-3">
+        <!-- SVG Original Logo: Ticket + Waveform + Letter B + QR nodes -->
+        <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 p-[1.5px] shadow-lg shadow-cyan-500/20 flex-shrink-0">
+          <div class="w-full h-full bg-[#0c1322] rounded-[10px] flex items-center justify-center overflow-hidden relative">
+            <svg class="w-7 h-7 text-cyan-400" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 8C10 5.79086 11.7909 4 14 4H34C36.2091 4 38 5.79086 38 8V18C35.7909 18 34 19.7909 34 22C34 24.2091 35.7909 26 38 26V40C38 42.2091 36.2091 44 34 44H14C11.7909 44 10 42.2091 10 40V26C12.2091 26 14 24.2091 14 22C14 19.7909 12.2091 18 10 18V8Z" stroke="currentColor" stroke-width="2.5" stroke-dasharray="2 2" class="opacity-70"/>
+              <!-- Stylized B with Soundwave & Digital QR Nodes -->
+              <path d="M19 14H26C28.2091 14 30 15.7909 30 18C30 20.2091 28.2091 22 26 22H19V14Z" fill="url(#bGrad)" stroke="#a855f7" stroke-width="2"/>
+              <path d="M19 22H27C29.2091 22 31 23.7909 31 26C31 28.2091 29.2091 30 27 30H19V22Z" fill="url(#bGrad)" stroke="#06b6d4" stroke-width="2"/>
+              <path d="M19 12V34" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+              <!-- Music Wave -->
+              <path d="M14 22C16 20 17 24 19 22" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="34" cy="12" r="1.5" fill="#06b6d4" />
+              <circle cx="34" cy="34" r="1.5" fill="#a855f7" />
+              <defs>
+                <linearGradient id="bGrad" x1="19" y1="14" x2="31" y2="30" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#06b6d4" stop-opacity="0.3"/>
+                  <stop offset="1" stop-color="#a855f7" stop-opacity="0.3"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+        </div>
+        
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-display font-extrabold tracking-wider text-xl bg-clip-text text-transparent bg-gradient-to-r from-white via-cyan-200 to-indigo-300">BODHAI</span>
+            <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/70 border border-cyan-800 text-cyan-400 font-bold">PRO</span>
+          </div>
+          <p class="text-[10px] tracking-widest text-slate-400 font-mono">EVENT TECHNOLOGY</p>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="flex-1 overflow-y-auto py-5 px-3 space-y-1">
+        <p class="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono">Operations</p>
+        
+        <button onclick="navigateTo('dashboard')" data-nav="dashboard" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-cyan-400 bg-cyan-950/40 border border-cyan-800/40">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>Dashboard</span>
+        </button>
+
+        <button onclick="navigateTo('events')" data-nav="events" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+          <span>Events</span>
+          <span id="badge-events-count" class="ml-auto text-xs font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">1</span>
+        </button>
+
+        <button onclick="navigateTo('create-event')" data-nav="create-event" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="calendar-plus" class="w-4 h-4"></i>
+          <span>Create Event</span>
+        </button>
+
+        <p class="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-5 mb-2 font-mono">Ticket Studio</p>
+
+        <button onclick="navigateTo('generator')" data-nav="generator" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="ticket" class="w-4 h-4"></i>
+          <span>Ticket Generator</span>
+        </button>
+
+        <button onclick="navigateTo('pass-designer')" data-nav="pass-designer" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="badge-check" class="w-4 h-4"></i>
+          <span>Pass Designer</span>
+        </button>
+
+        <button onclick="navigateTo('templates')" data-nav="templates" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="palette" class="w-4 h-4"></i>
+          <span>Ticket Templates</span>
+        </button>
+
+        <p class="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-5 mb-2 font-mono">Gate & Attendees</p>
+
+        <button onclick="navigateTo('verification')" data-nav="verification" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="scan" class="w-4 h-4"></i>
+          <span>Ticket Verification</span>
+          <span class="ml-auto text-[10px] font-mono bg-indigo-950/80 text-indigo-400 border border-indigo-800 px-1.5 py-0.5 rounded">SCAN</span>
+        </button>
+
+        <button onclick="navigateTo('generated-tickets')" data-nav="generated-tickets" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="archive" class="w-4 h-4"></i>
+          <span>Generated Tickets</span>
+          <span id="badge-tickets-count" class="ml-auto text-xs font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">5</span>
+        </button>
+
+        <button onclick="navigateTo('attendees')" data-nav="attendees" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span>Attendees</span>
+        </button>
+
+        <button onclick="navigateTo('analytics')" data-nav="analytics" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>Analytics</span>
+        </button>
+
+        <button onclick="navigateTo('dfd')" data-nav="dfd" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="network" class="w-4 h-4"></i>
+          <span>Architecture & DFD</span>
+        </button>
+
+        <button onclick="navigateTo('settings')" data-nav="settings" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+          <span>Settings</span>
+        </button>
+      </div>
+
+      <!-- Bottom Admin Profile Area -->
+      <div class="p-3.5 border-t border-slate-800/80 bg-[#0a0f1c]">
+        <div class="flex items-center gap-3 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center font-bold text-sm text-white">
+            BO
+          </div>
+          <div class="flex-1 min-w-0">
+            <h4 class="text-xs font-semibold truncate text-slate-200">Bodhai Admin</h4>
+            <p class="text-[10px] text-emerald-400 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Terminal Active
+            </p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN WRAPPER -->
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#090d16]">
+      
+      <!-- TOP NAVBAR -->
+      <header class="h-20 bg-[#0c1322]/80 backdrop-blur-md border-b border-slate-800/80 px-4 md:px-8 flex items-center justify-between z-30">
+        <div class="flex items-center gap-4">
+          <button id="mobile-sidebar-toggle" class="lg:hidden p-2 rounded-lg bg-slate-800/80 text-slate-300 hover:text-white">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          
+          <div class="hidden sm:flex flex-col">
+            <span class="text-xs text-slate-400 font-mono flex items-center gap-2">
+              <span>BODHAI HQ</span>
+              <span>/</span>
+              <span id="nav-breadcrumb" class="text-cyan-400 font-medium capitalize">Dashboard</span>
+            </span>
+            <h1 id="page-title" class="text-lg font-bold text-white tracking-tight">Executive Dashboard</h1>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Search box -->
+          <div class="relative hidden md:block">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="global-search" type="text" placeholder="Search tickets, IDs, attendees..." class="w-64 pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-700/60 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500 transition">
+          </div>
+
+          <!-- Quick Action -->
+          <button onclick="navigateTo('generator')" class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-medium text-xs shadow-lg shadow-cyan-500/20 transition transform active:scale-95">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Quick Pass</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content" class="flex-1 overflow-y-auto p-4 md:p-8">
+        
+        <!-- SECTION 1: DASHBOARD -->
+        <section id="view-dashboard" class="space-y-8">
+          
+          <!-- Welcome Banner -->
+          <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-950 via-slate-900 to-cyan-950 p-6 md:p-8 border border-cyan-900/40 shadow-xl">
+            <div class="relative z-10 max-w-2xl">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800 text-cyan-300 text-xs font-mono mb-3">
+                <i data-lucide="radio" class="w-3 h-3 animate-pulse text-cyan-400"></i> System Operational — Live Protocol 2026
+              </span>
+              <h2 class="text-2xl md:text-3xl font-display font-extrabold text-white tracking-tight">Create. Customize. Pass. Experience.</h2>
+              <p class="text-sm text-slate-300 mt-2 leading-relaxed">
+                Welcome to BODHAI Concert & Pass Engine. Manage live audio events, configure multi-tier gate passes, generate verifiable QR tickets, and monitor checkpoint attendance in real-time.
+              </p>
+              <div class="flex flex-wrap gap-3 mt-5">
+                <button onclick="navigateTo('create-event')" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition flex items-center gap-2 shadow-lg shadow-cyan-500/20">
+                  <i data-lucide="plus-circle" class="w-4 h-4"></i> Create Concert
+                </button>
+                <button onclick="navigateTo('verification')" class="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-white font-medium text-xs transition flex items-center gap-2">
+                  <i data-lucide="scan-line" class="w-4 h-4 text-purple-400"></i> Launch Gate Scanner
+                </button>
+              </div>
+            </div>
+            
+            <!-- Background Decorative Wave Accent -->
+            <div class="absolute right-0 top-0 bottom-0 w-1/2 opacity-10 pointer-events-none flex items-center justify-end pr-8">
+              <svg viewBox="0 0 200 200" class="w-96 h-96 text-cyan-400">
+                <path fill="currentColor" d="M44.7,-76.4C58.8,-69.2,71.8,-59.1,79.6,-45.8C87.4,-32.6,90,-16.3,88.5,-0.9C86.9,14.6,81.2,29.1,72.4,41.4C63.6,53.6,51.8,63.5,38.6,71C25.4,78.5,12.7,83.5,-0.6,84.5C-13.8,85.5,-27.7,82.5,-39.9,74.7C-52.1,66.9,-62.7,54.3,-70.7,40.5C-78.7,26.7,-84.1,11.8,-83.4,-2.8C-82.7,-17.4,-75.9,-31.8,-66.2,-43.8C-56.5,-55.8,-43.9,-65.4,-30.4,-72.9C-16.9,-80.4,-2.5,-85.8,11.4,-84C25.3,-82.2,30.6,-83.6,44.7,-76.4Z" transform="translate(100 100)" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- Stats Cards Grid -->
+          <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+            
+            <div class="col-span-1 bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-mono">EVENTS</span>
+                <i data-lucide="calendar" class="w-4 h-4 text-cyan-400"></i>
+              </div>
+              <div id="stat-total-events" class="text-2xl font-bold font-mono text-white">0</div>
+              <p class="text-[11px] text-slate-400 mt-1">Concerts registered</p>
+            </div>
+
+            <div class="col-span-1 bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-mono">TICKETS</span>
+                <i data-lucide="ticket" class="w-4 h-4 text-purple-400"></i>
+              </div>
+              <div id="stat-total-tickets" class="text-2xl font-bold font-mono text-white">0</div>
+              <p class="text-[11px] text-slate-400 mt-1">Issued passes</p>
+            </div>
+
+            <div class="col-span-1 bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-mono">VERIFIED</span>
+                <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+              </div>
+              <div id="stat-verified-tickets" class="text-2xl font-bold font-mono text-emerald-400">0</div>
+              <p class="text-[11px] text-slate-400 mt-1">Checked in at gate</p>
+            </div>
+
+            <div class="col-span-1 bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-mono">ATTENDEES</span>
+                <i data-lucide="users" class="w-4 h-4 text-blue-400"></i>
+              </div>
+              <div id="stat-total-attendees" class="text-2xl font-bold font-mono text-white">0</div>
+              <p class="text-[11px] text-slate-400 mt-1">Registered roster</p>
+            </div>
+
+            <div class="col-span-1 bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-mono">REVENUE</span>
+                <i data-lucide="indian-rupee" class="w-4 h-4 text-amber-400"></i>
+              </div>
+              <div id="stat-total-revenue" class="text-2xl font-bold font-mono text-amber-400">₹0</div>
+              <p class="text-[11px] text-slate-400 mt-1">Pass sales value</p>
+            </div>
+
+            <div class="col-span-1 bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-mono">RATE</span>
+                <i data-lucide="trending-up" class="w-4 h-4 text-indigo-400"></i>
+              </div>
+              <div id="stat-turnout-rate" class="text-2xl font-bold font-mono text-indigo-400">0%</div>
+              <p class="text-[11px] text-slate-400 mt-1">Gate check-in %</p>
+            </div>
+
+          </div>
+
+          <!-- Charts and Visuals Row -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Chart: Generation Breakdown -->
+            <div class="lg:col-span-2 bg-[#0f172a] border border-slate-800/80 p-6 rounded-2xl">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-bold text-white text-base">Pass Category Distribution</h3>
+                  <p class="text-xs text-slate-400">Breakdown of issued tickets across VIP, General & Staff tiers</p>
+                </div>
+                <span class="text-xs font-mono px-2 py-1 bg-slate-800 text-cyan-400 rounded-lg">Real-time DB</span>
+              </div>
+              <div id="category-bars-container" class="space-y-4 pt-3">
+                <!-- Dynamically populated category bars -->
+              </div>
+            </div>
+
+            <!-- Right Chart: Verification Health -->
+            <div class="bg-[#0f172a] border border-slate-800/80 p-6 rounded-2xl flex flex-col justify-between">
+              <div>
+                <h3 class="font-bold text-white text-base">Gate Verification Pulse</h3>
+                <p class="text-xs text-slate-400">Ratio of checked-in to pending passes</p>
+              </div>
+              
+              <!-- SVG Donut Chart -->
+              <div class="relative py-4 flex items-center justify-center">
+                <svg class="w-40 h-40 transform -rotate-90" viewBox="0 0 36 36">
+                  <!-- Background circle -->
+                  <path class="text-slate-800" stroke-width="3.8" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  <!-- Progress circle -->
+                  <path id="donut-progress-used" class="text-emerald-500 transition-all duration-700 ease-out" stroke-dasharray="0, 100" stroke-width="3.8" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span id="donut-percent" class="text-2xl font-bold font-mono text-white">0%</span>
+                  <span class="text-[10px] text-slate-400 uppercase font-mono tracking-wider">Gate Used</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 text-center text-xs font-mono pt-3 border-t border-slate-800/80">
+                <div class="p-2 bg-slate-900/60 rounded-xl">
+                  <div class="text-emerald-400 font-bold" id="badge-used-count">0</div>
+                  <div class="text-[10px] text-slate-400">Used At Gate</div>
+                </div>
+                <div class="p-2 bg-slate-900/60 rounded-xl">
+                  <div class="text-cyan-400 font-bold" id="badge-active-count">0</div>
+                  <div class="text-[10px] text-slate-400">Active / Pending</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Featured Upcoming Events Showcase -->
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="font-bold text-white text-lg">Live & Scheduled Concerts</h3>
+                <p class="text-xs text-slate-400">Events currently active for pass generation and checkpoint admission</p>
+              </div>
+              <button onclick="navigateTo('events')" class="text-xs text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1">
+                View All <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            
+            <div id="dashboard-events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+        </section>
+
+        <!-- SECTION 2: EVENTS LIST -->
+        <section id="view-events" class="space-y-6 hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Concert & Event Management</h2>
+              <p class="text-xs text-slate-400">Manage festival rosters, schedules, venues, and tier inventories</p>
+            </div>
+            <button onclick="navigateTo('create-event')" class="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition flex items-center gap-2 self-start shadow-lg shadow-cyan-500/20">
+              <i data-lucide="plus" class="w-4 h-4"></i> New Event
+            </button>
+          </div>
+
+          <div id="events-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Events rendered here -->
+          </div>
+        </section>
+
+        <!-- SECTION 3: CREATE EVENT FORM -->
+        <section id="view-create-event" class="space-y-6 hidden">
+          <div class="max-w-4xl mx-auto">
+            <div class="mb-6">
+              <h2 class="text-2xl font-bold text-white">Create New Event</h2>
+              <p class="text-xs text-slate-400">Define concert headline, artist branding, venue schedules, and ticket pricing tiers</p>
+            </div>
+
+            <form id="create-event-form" class="space-y-6 bg-[#0f172a] border border-slate-800/80 p-6 md:p-8 rounded-2xl" onsubmit="handleCreateEvent(event)">
+              
+              <!-- Core Event Info -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-mono uppercase text-cyan-400 tracking-wider flex items-center gap-2">
+                  <i data-lucide="disc" class="w-4 h-4"></i> Event & Artist Information
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Event Name *</label>
+                    <input type="text" id="ev-name" required placeholder="e.g. BODHAI LIVE 2026" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Subtitle / Tagline</label>
+                    <input type="text" id="ev-subtitle" placeholder="e.g. The Ultimate Sound Odyssey" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Artist / Performer Name *</label>
+                    <input type="text" id="ev-artist" required placeholder="e.g. The Midnight Waves & Arijit" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Organizer Entity</label>
+                    <input type="text" id="ev-organizer" value="Bodhai Live Entertainment" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                </div>
+
+                <!-- Image Uploads with Base64 Conversion -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <!-- Banner Image -->
+                  <div class="space-y-2">
+                    <label class="block text-xs font-medium text-slate-300">Concert Banner / Cover Image</label>
+                    <div class="flex items-center gap-3">
+                      <div id="ev-banner-preview" class="w-24 h-16 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center text-slate-500 text-xs">
+                        <span>No image</span>
+                      </div>
+                      <div class="flex-1">
+                        <input type="file" id="ev-banner-input" accept="image/*" class="text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-950 file:text-cyan-400 hover:file:bg-cyan-900 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 mt-1">Converts automatically to Base64 in storage.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Artist Image -->
+                  <div class="space-y-2">
+                    <label class="block text-xs font-medium text-slate-300">Artist Profile Image</label>
+                    <div class="flex items-center gap-3">
+                      <div id="ev-artist-preview" class="w-16 h-16 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center text-slate-500 text-xs">
+                        <span>Avatar</span>
+                      </div>
+                      <div class="flex-1">
+                        <input type="file" id="ev-artist-input" accept="image/*" class="text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-950 file:text-purple-400 hover:file:bg-purple-900 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 mt-1">Used on passes and VIP cards.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Venue and Schedule Details -->
+              <div class="space-y-4 pt-4 border-t border-slate-800">
+                <h3 class="text-sm font-mono uppercase text-cyan-400 tracking-wider flex items-center gap-2">
+                  <i data-lucide="map-pin" class="w-4 h-4"></i> Venue & Timing
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Venue Name *</label>
+                    <input type="text" id="ev-venue" required placeholder="e.g. Bodh Ghat Arena" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">City *</label>
+                    <input type="text" id="ev-city" required placeholder="e.g. Varanasi" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div class="md:col-span-3">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Full Venue Address</label>
+                    <input type="text" id="ev-address" placeholder="e.g. Riverfront Esplanade, Outer Ring Road, Varanasi - 221001" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Event Date *</label>
+                    <input type="date" id="ev-date" required class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Gate Opening Time *</label>
+                    <input type="time" id="ev-start-time" required value="19:00" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Expected End Time</label>
+                    <input type="time" id="ev-end-time" value="23:30" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Pass Tier Categories Configuration -->
+              <div class="space-y-4 pt-4 border-t border-slate-800">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-sm font-mono uppercase text-cyan-400 tracking-wider flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4"></i> Pass Categories & Pricing (₹)
+                  </h3>
+                  <button type="button" onclick="addCustomCategoryRow()" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-mono">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Custom Tier
+                  </button>
+                </div>
+                
+                <div id="categories-builder" class="space-y-3">
+                  <!-- Defaults: General, Silver, Gold, VIP, VVIP -->
+                  <div class="category-row grid grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                    <input type="text" class="col-span-5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-name" value="GENERAL">
+                    <input type="number" class="col-span-4 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-price" value="499" placeholder="Price ₹">
+                    <input type="number" class="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-seats" value="1000" placeholder="Seats">
+                    <button type="button" onclick="this.closest('.category-row').remove()" class="col-span-1 text-slate-500 hover:text-rose-400 flex justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                  </div>
+                  <div class="category-row grid grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                    <input type="text" class="col-span-5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-name" value="VIP">
+                    <input type="number" class="col-span-4 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-price" value="2499" placeholder="Price ₹">
+                    <input type="number" class="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-seats" value="250" placeholder="Seats">
+                    <button type="button" onclick="this.closest('.category-row').remove()" class="col-span-1 text-slate-500 hover:text-rose-400 flex justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                  </div>
+                  <div class="category-row grid grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                    <input type="text" class="col-span-5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-name" value="VVIP ACCESS">
+                    <input type="number" class="col-span-4 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-price" value="4999" placeholder="Price ₹">
+                    <input type="number" class="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-seats" value="50" placeholder="Seats">
+                    <button type="button" onclick="this.closest('.category-row').remove()" class="col-span-1 text-slate-500 hover:text-rose-400 flex justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Terms & Details -->
+              <div class="space-y-4 pt-4 border-t border-slate-800">
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">Event Description & Notes</label>
+                  <textarea id="ev-desc" rows="2" placeholder="Experience high definition soundscapes and laser choreography..." class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"></textarea>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-end gap-3 pt-4">
+                <button type="button" onclick="navigateTo('events')" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">
+                  Cancel
+                </button>
+                <button type="submit" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-cyan-500/25 transition">
+                  Save & Launch Concert
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </section>
+
+        <!-- SECTION 4: TICKET GENERATOR (SPLIT SCREEN) -->
+        <section id="view-generator" class="space-y-6 hidden">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Ticket Studio & Pass Generator</h2>
+              <p class="text-xs text-slate-400">Configure attendee pass details on the left, watch high-fidelity concert pass render live on the right</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="applySampleTicketData()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-mono transition flex items-center gap-1.5">
+                <i data-lucide="wand-2" class="w-3.5 h-3.5 text-cyan-400"></i> Autofill Demo Pass
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+            
+            <!-- LEFT COLUMN: CONTROLS (5 cols on xl) -->
+            <div class="xl:col-span-5 bg-[#0f172a] border border-slate-800/80 p-6 rounded-2xl space-y-5">
+              <h3 class="text-xs font-mono uppercase text-cyan-400 tracking-wider flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4"></i> Pass Configurations
+              </h3>
+
+              <!-- Event Selection -->
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Select Event</label>
+                <select id="gen-event-select" onchange="onGeneratorEventChange()" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500">
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+
+              <!-- Attendee Details -->
+              <div class="space-y-3 pt-2 border-t border-slate-800">
+                <label class="block text-xs font-semibold text-slate-300">Attendee Credentials</label>
+                <div>
+                  <input type="text" id="gen-holder-name" oninput="updateLiveTicketPreview()" value="Raj Gautam" placeholder="Full Holder Name *" class="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <input type="tel" id="gen-holder-phone" oninput="updateLiveTicketPreview()" value="+91 98765 43210" placeholder="Mobile Number" class="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500">
+                  <input type="email" id="gen-holder-email" oninput="updateLiveTicketPreview()" value="raj.gautam@bodhai.tech" placeholder="Email Address" class="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500">
+                </div>
+              </div>
+
+              <!-- Tier Category & Seat Assignment -->
+              <div class="space-y-3 pt-2 border-t border-slate-800">
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Pass Category</label>
+                    <select id="gen-category-select" onchange="onGeneratorCategoryChange()" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500">
+                      <!-- Filled based on event -->
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ticket Price (₹)</label>
+                    <input type="number" id="gen-price" oninput="updateLiveTicketPreview()" value="2499" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-cyan-500">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-[11px] font-medium text-slate-400 mb-1">Gate Access</label>
+                    <input type="text" id="gen-gate" oninput="updateLiveTicketPreview()" value="GATE A" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white uppercase focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-medium text-slate-400 mb-1">Row Code</label>
+                    <input type="text" id="gen-row" oninput="updateLiveTicketPreview()" value="ROW 04" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white uppercase focus:outline-none focus:border-cyan-500">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-medium text-slate-400 mb-1">Seat Number</label>
+                    <input type="text" id="gen-seat" oninput="updateLiveTicketPreview()" value="SEAT VIP-24" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white uppercase focus:outline-none focus:border-cyan-500">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Theme & Style Selection -->
+              <div class="space-y-3 pt-2 border-t border-slate-800">
+                <label class="block text-xs font-semibold text-slate-300">Design Template & Theme</label>
+                <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                  <button type="button" onclick="setTicketTheme('obsidian')" class="theme-btn px-2 py-2 rounded-xl text-[10px] font-mono border text-center transition bg-slate-900 border-cyan-500 text-cyan-300" data-theme="obsidian">
+                    Obsidian
+                  </button>
+                  <button type="button" onclick="setTicketTheme('neon')" class="theme-btn px-2 py-2 rounded-xl text-[10px] font-mono border text-center transition bg-slate-900 border-slate-700 text-purple-300 hover:border-purple-500" data-theme="neon">
+                    Neon
+                  </button>
+                  <button type="button" onclick="setTicketTheme('gold')" class="theme-btn px-2 py-2 rounded-xl text-[10px] font-mono border text-center transition bg-slate-900 border-slate-700 text-amber-300 hover:border-amber-500" data-theme="gold">
+                    Gold
+                  </button>
+                  <button type="button" onclick="setTicketTheme('festival')" class="theme-btn px-2 py-2 rounded-xl text-[10px] font-mono border text-center transition bg-slate-900 border-slate-700 text-pink-300 hover:border-pink-500" data-theme="festival">
+                    Festival
+                  </button>
+                  <button type="button" onclick="setTicketTheme('minimal')" class="theme-btn px-2 py-2 rounded-xl text-[10px] font-mono border text-center transition bg-slate-100 border-slate-300 text-slate-900 hover:bg-white" data-theme="minimal">
+                    Minimal
+                  </button>
+                </div>
+              </div>
+
+              <!-- Action Trigger -->
+              <div class="pt-4 border-t border-slate-800 space-y-2">
+                <button onclick="generateAndSaveTicket()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-cyan-500/25 transition transform active:scale-[0.99] flex items-center justify-center gap-2">
+                  <i data-lucide="check-circle" class="w-4 h-4"></i> Generate & Store Ticket
+                </button>
+                <p class="text-[10px] text-center text-slate-500 font-mono">Generates verifiable QR, unique Ticket ID, and registers to local DB</p>
+              </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: LIVE TICKET PREVIEW CANVAS (7 cols on xl) -->
+            <div class="xl:col-span-7 space-y-4 sticky top-4">
+              
+              <div class="flex items-center justify-between px-1">
+                <span class="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Live Concert Pass Engine
+                </span>
+                <div class="flex items-center gap-2">
+                  <button onclick="downloadLiveTicketPNG()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-mono text-slate-300 flex items-center gap-1">
+                    <i data-lucide="image" class="w-3.5 h-3.5 text-cyan-400"></i> PNG
+                  </button>
+                  <button onclick="downloadLiveTicketPDF()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-mono text-slate-300 flex items-center gap-1">
+                    <i data-lucide="file-text" class="w-3.5 h-3.5 text-purple-400"></i> PDF
+                  </button>
+                  <button onclick="printLiveTicket()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-mono text-slate-300 flex items-center gap-1">
+                    <i data-lucide="printer" class="w-3.5 h-3.5 text-emerald-400"></i> Print
+                  </button>
+                </div>
+              </div>
+
+              <!-- TICKET PREVIEW CARD CONTAINER (Horizontal Concert Stub Layout) -->
+              <div id="live-ticket-wrapper" class="overflow-x-auto pb-4 pt-1">
+                <div id="live-ticket-render" class="theme-obsidian relative w-[760px] min-w-[760px] rounded-3xl overflow-hidden shadow-2xl transition-all duration-300 flex">
+                  
+                  <!-- MAIN TICKET BODY (Left 72%) -->
+                  <div class="w-[72%] p-7 flex flex-col justify-between relative border-r border-dashed border-slate-700/80">
+                    
+                    <!-- Decorative Perforations -->
+                    <div class="ticket-notch-top right-0"></div>
+                    <div class="ticket-notch-bottom right-0"></div>
+
+                    <!-- Top Row: Brand & Pass Tag -->
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center font-black text-xs text-white">
+                          B
+                        </div>
+                        <div>
+                          <span class="font-display font-black tracking-wider text-sm">BODHAI</span>
+                          <span class="block text-[9px] font-mono tracking-widest text-slate-400">CONCERT PASS</span>
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-2">
+                        <span id="ticket-preview-cat-badge" class="px-3 py-1 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase tracking-wider">
+                          VIP ACCESS
+                        </span>
+                        <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-slate-800/80 text-slate-400">OFFICIAL PASS</span>
+                      </div>
+                    </div>
+
+                    <!-- Middle Row: Event Banner & Artist Details -->
+                    <div class="my-5 flex gap-4 items-center">
+                      <div id="ticket-preview-banner-box" class="w-28 h-28 rounded-2xl bg-slate-800 border border-slate-700/80 overflow-hidden flex-shrink-0 relative group">
+                        <img id="ticket-preview-banner-img" src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80" alt="Concert" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                      </div>
+                      
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                          <span id="ticket-preview-artist" class="text-xs font-mono font-bold uppercase tracking-wider text-cyan-300 truncate">The Midnight Waves</span>
+                        </div>
+                        <h3 id="ticket-preview-title" class="text-2xl font-display font-extrabold tracking-tight truncate leading-tight">BODHAI MUSIC NIGHT</h3>
+                        <p id="ticket-preview-subtitle" class="text-xs text-slate-400 truncate mb-3">The Ultimate Live Audio Experience</p>
+                        
+                        <!-- Venue & Schedule Pill -->
+                        <div class="bg-inner-custom bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-4 text-xs font-mono">
+                          <div class="flex items-center gap-1.5 text-slate-300">
+                            <i data-lucide="calendar" class="w-3.5 h-3.5 text-cyan-400"></i>
+                            <span id="ticket-preview-date">25 DEC 2026</span>
+                          </div>
+                          <div class="flex items-center gap-1.5 text-slate-300">
+                            <i data-lucide="clock" class="w-3.5 h-3.5 text-purple-400"></i>
+                            <span id="ticket-preview-time">07:00 PM</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Bottom Details Row: Attendee & Seat Matrix -->
+                    <div class="pt-4 border-t border-slate-800/80 grid grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <span class="block text-[10px] font-mono text-muted-custom text-slate-400 uppercase">PASS HOLDER</span>
+                        <span id="ticket-preview-holder" class="font-bold text-white text-sm truncate block">Raj Gautam</span>
+                      </div>
+                      <div>
+                        <span class="block text-[10px] font-mono text-muted-custom text-slate-400 uppercase">VENUE</span>
+                        <span id="ticket-preview-venue" class="font-semibold text-slate-300 truncate block">Bodh Ghat Arena</span>
+                      </div>
+                      <div>
+                        <span class="block text-[10px] font-mono text-muted-custom text-slate-400 uppercase">SEAT / ROW</span>
+                        <span id="ticket-preview-seatrow" class="font-mono font-bold text-cyan-400 truncate block">A-24 / ROW 04</span>
+                      </div>
+                      <div>
+                        <span class="block text-[10px] font-mono text-muted-custom text-slate-400 uppercase">GATE</span>
+                        <span id="ticket-preview-gate" class="font-mono font-bold text-purple-400 truncate block">GATE A</span>
+                      </div>
+                    </div>
+
+                    <!-- Watermark Security Pattern -->
+                    <div class="absolute bottom-2 right-4 text-[9px] font-mono text-slate-600/70 select-none pointer-events-none">
+                      ENCRYPTED • BODHAI SECURE ENGINE
+                    </div>
+                  </div>
+
+                  <!-- DETACHABLE STUB (Right 28%) -->
+                  <div class="w-[28%] bg-black/30 p-6 flex flex-col justify-between items-center text-center relative">
+                    
+                    <!-- Stub Header -->
+                    <div>
+                      <span class="text-[9px] font-mono uppercase tracking-widest text-slate-400 block mb-0.5">CHECKPOINT STUB</span>
+                      <h4 id="ticket-preview-stub-cat" class="text-xs font-mono font-bold text-cyan-300 uppercase">VIP ACCESS</h4>
+                    </div>
+
+                    <!-- QR Code Canvas Container -->
+                    <div class="p-2.5 bg-white rounded-2xl shadow-xl flex items-center justify-center my-2">
+                      <div id="ticket-preview-qrcode"></div>
+                    </div>
+
+                    <!-- Ticket ID & Security Monospace -->
+                    <div class="w-full space-y-1">
+                      <div id="ticket-preview-id" class="text-[11px] font-mono font-extrabold tracking-wider text-cyan-400 select-all">
+                        BDH-2026-VIP-8F92A1
+                      </div>
+                      <p class="text-[9px] text-muted-custom text-slate-400 font-mono">SCAN AT ENTRANCE TURNSTILE</p>
+                      
+                      <!-- Barcode Graphic Simulation -->
+                      <div class="h-5 w-full flex items-center justify-center gap-[2px] opacity-60 pt-1">
+                        <span class="h-full w-1 bg-current"></span>
+                        <span class="h-full w-[2px] bg-current"></span>
+                        <span class="h-full w-0.5 bg-current"></span>
+                        <span class="h-full w-1.5 bg-current"></span>
+                        <span class="h-full w-0.5 bg-current"></span>
+                        <span class="h-full w-1 bg-current"></span>
+                        <span class="h-full w-2 bg-current"></span>
+                        <span class="h-full w-0.5 bg-current"></span>
+                        <span class="h-full w-1.5 bg-current"></span>
+                        <span class="h-full w-[1px] bg-current"></span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION 5: PASS DESIGNER (VERTICAL LANYARD / BADGE) -->
+        <section id="view-pass-designer" class="space-y-6 hidden">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Backstage & VIP Pass Designer</h2>
+              <p class="text-xs text-slate-400">Design vertical event credentials for Artists, Production Crew, VIPs, and Media Staff</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            <!-- Controls (5 cols) -->
+            <div class="lg:col-span-5 bg-[#0f172a] border border-slate-800/80 p-6 rounded-2xl space-y-4">
+              <h3 class="text-xs font-mono uppercase text-purple-400 tracking-wider flex items-center gap-2">
+                <i data-lucide="badge-percent" class="w-4 h-4"></i> Lanyard Pass Parameters
+              </h3>
+
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Pass Role Type</label>
+                <select id="pass-role-select" onchange="updateLivePassPreview()" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+                  <option value="ALL ACCESS • ARTIST">ARTIST PASS</option>
+                  <option value="VIP GUEST ACCESS" selected>VIP PASS</option>
+                  <option value="BACKSTAGE CREW">BACKSTAGE PASS</option>
+                  <option value="MEDIA & PRESS">MEDIA PASS</option>
+                  <option value="EVENT OPERATIONS">STAFF PASS</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Pass Holder Name</label>
+                <input type="text" id="pass-name-input" oninput="updateLivePassPreview()" value="Arjun Mehta" class="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Badge Accent Color</label>
+                <div class="flex gap-2">
+                  <button type="button" onclick="setPassAccent('#06b6d4')" class="w-7 h-7 rounded-full bg-cyan-500 ring-2 ring-offset-2 ring-offset-slate-900 ring-white"></button>
+                  <button type="button" onclick="setPassAccent('#a855f7')" class="w-7 h-7 rounded-full bg-purple-500"></button>
+                  <button type="button" onclick="setPassAccent('#f59e0b')" class="w-7 h-7 rounded-full bg-amber-500"></button>
+                  <button type="button" onclick="setPassAccent('#10b981')" class="w-7 h-7 rounded-full bg-emerald-500"></button>
+                  <button type="button" onclick="setPassAccent('#ec4899')" class="w-7 h-7 rounded-full bg-pink-500"></button>
+                </div>
+              </div>
+
+              <div class="pt-4 border-t border-slate-800 space-y-2">
+                <button onclick="downloadPassBadgePNG()" class="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition flex items-center justify-center gap-2">
+                  <i data-lucide="download" class="w-4 h-4"></i> Download Badge (PNG)
+                </button>
+              </div>
+            </div>
+
+            <!-- Preview (7 cols) -->
+            <div class="lg:col-span-7 flex justify-center py-4">
+              <div id="live-pass-card" class="w-80 rounded-3xl bg-gradient-to-b from-[#131b2e] to-[#090e1a] border-2 border-cyan-500/60 p-6 flex flex-col items-center text-center relative shadow-2xl overflow-hidden">
+                
+                <!-- Lanyard Clip Notch Hole -->
+                <div class="w-14 h-4 rounded-full bg-slate-900 border-2 border-slate-700 mb-4 shadow-inner"></div>
+
+                <!-- Pass Header -->
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 rounded bg-gradient-to-tr from-cyan-400 to-indigo-500 flex items-center justify-center font-bold text-white text-xs">B</div>
+                  <span class="font-display font-extrabold tracking-wider text-sm text-white">BODHAI</span>
+                </div>
+                <span class="text-[9px] font-mono text-cyan-400 tracking-widest uppercase mb-4">CONCERT ACCREDITATION</span>
+
+                <!-- Avatar Box -->
+                <div class="w-24 h-24 rounded-2xl bg-slate-800 border-2 border-cyan-400/80 overflow-hidden shadow-lg mb-3">
+                  <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&q=80" alt="Holder" class="w-full h-full object-cover">
+                </div>
+
+                <h3 id="pass-preview-name" class="font-display font-extrabold text-xl text-white">Arjun Mehta</h3>
+                <div id="pass-preview-role-pill" class="my-2 px-3 py-1 rounded-full bg-cyan-500 text-black font-mono font-extrabold text-xs uppercase tracking-wider">
+                  VIP GUEST ACCESS
+                </div>
+
+                <p class="text-xs text-slate-300 font-semibold mt-1">BODHAI MUSIC NIGHT 2026</p>
+                <p class="text-[10px] text-slate-400 font-mono">BODH GHAT ARENA • VARANASI</p>
+
+                <!-- Pass QR -->
+                <div class="my-4 p-2 bg-white rounded-xl">
+                  <div id="pass-preview-qrcode"></div>
+                </div>
+
+                <div class="text-[11px] font-mono font-bold text-slate-300 tracking-wider">
+                  PASS-BDH-2026-9081
+                </div>
+                <div class="text-[9px] font-mono text-emerald-400 flex items-center gap-1 mt-1">
+                  <i data-lucide="shield-check" class="w-3 h-3"></i> VERIFIED ACCREDITATION
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION 6: TICKET TEMPLATES -->
+        <section id="view-templates" class="space-y-6 hidden">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Concert Pass Templates</h2>
+            <p class="text-xs text-slate-400">Select any pre-designed template style and launch into the Ticket Studio with 1-click</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
+            <!-- Template 1: Obsidian -->
+            <div class="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 hover:border-cyan-500/50 transition group">
+              <div class="h-36 rounded-xl theme-obsidian p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-cyan-400">BODHAI LIVE</span>
+                  <span class="text-[10px] font-mono bg-cyan-950 px-2 py-0.5 rounded text-cyan-300 border border-cyan-800">VIP</span>
+                </div>
+                <div>
+                  <div class="font-display font-bold text-lg">Obsidian Glass</div>
+                  <p class="text-[10px] text-slate-400">Deep cyan-indigo dark mode aesthetic</p>
+                </div>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">01 — Obsidian Glassmorphism</h4>
+                <p class="text-xs text-slate-400 mt-1">Dark frosted look with cyan/violet neon glow, best for modern EDM festivals.</p>
+              </div>
+              <button onclick="useTemplateFromGallery('obsidian')" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-cyan-500 hover:text-black font-semibold text-xs text-slate-200 transition">
+                Use Obsidian Template
+              </button>
+            </div>
+
+            <!-- Template 2: Cyber Neon -->
+            <div class="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 hover:border-purple-500/50 transition group">
+              <div class="h-36 rounded-xl theme-neon p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-purple-400">CYBER WAVE</span>
+                  <span class="text-[10px] font-mono bg-purple-950 px-2 py-0.5 rounded text-purple-300 border border-purple-800">NEON</span>
+                </div>
+                <div>
+                  <div class="font-display font-bold text-lg text-purple-200">Cyber Neon</div>
+                  <p class="text-[10px] text-slate-400">High-contrast purple & cyberpunk grid</p>
+                </div>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">02 — Cyber Neon</h4>
+                <p class="text-xs text-slate-400 mt-1">Futuristic night-club and synthwave concert ticket styling.</p>
+              </div>
+              <button onclick="useTemplateFromGallery('neon')" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-purple-500 hover:text-black font-semibold text-xs text-slate-200 transition">
+                Use Neon Template
+              </button>
+            </div>
+
+            <!-- Template 3: Royal Gold -->
+            <div class="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 hover:border-amber-500/50 transition group">
+              <div class="h-36 rounded-xl theme-gold p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-amber-400">ROYAL PASS</span>
+                  <span class="text-[10px] font-mono bg-amber-950 px-2 py-0.5 rounded text-amber-300 border border-amber-800">LUXURY</span>
+                </div>
+                <div>
+                  <div class="font-display font-bold text-lg text-amber-200">Royal Gold</div>
+                  <p class="text-[10px] text-amber-500/70">Onyx black with gold gradient borders</p>
+                </div>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">03 — Royal Gold Luxury</h4>
+                <p class="text-xs text-slate-400 mt-1">Premium metallic look tailored for orchestral galas and VVIP lounges.</p>
+              </div>
+              <button onclick="useTemplateFromGallery('gold')" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-black font-semibold text-xs text-slate-200 transition">
+                Use Royal Gold Template
+              </button>
+            </div>
+
+            <!-- Template 4: Festival Electric -->
+            <div class="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 hover:border-pink-500/50 transition group">
+              <div class="h-36 rounded-xl theme-festival p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-pink-400">OPEN AIR</span>
+                  <span class="text-[10px] font-mono bg-pink-950 px-2 py-0.5 rounded text-pink-300 border border-pink-800">STAGE</span>
+                </div>
+                <div>
+                  <div class="font-display font-bold text-lg text-white">Festival Electric</div>
+                  <p class="text-[10px] text-pink-200/70">Vivid multi-stage arena mesh</p>
+                </div>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">04 — Festival Electric</h4>
+                <p class="text-xs text-slate-400 mt-1">Multi-color saturated gradient pass for massive 3-day music fests.</p>
+              </div>
+              <button onclick="useTemplateFromGallery('festival')" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-pink-500 hover:text-black font-semibold text-xs text-slate-200 transition">
+                Use Festival Template
+              </button>
+            </div>
+
+            <!-- Template 5: Minimalist Clean -->
+            <div class="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 hover:border-slate-400 transition group">
+              <div class="h-36 rounded-xl theme-minimal p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-slate-900">STUDIO PASS</span>
+                  <span class="text-[10px] font-mono bg-slate-200 px-2 py-0.5 rounded text-slate-900 font-bold">MINIMAL</span>
+                </div>
+                <div>
+                  <div class="font-display font-bold text-lg text-slate-900">Minimal Clean</div>
+                  <p class="text-[10px] text-slate-600">Stark monochrome editorial pass</p>
+                </div>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">05 — Minimalist Clean</h4>
+                <p class="text-xs text-slate-400 mt-1">White background, high contrast, clean typography for acoustic sets.</p>
+              </div>
+              <button onclick="useTemplateFromGallery('minimal')" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-200 hover:text-black font-semibold text-xs text-slate-200 transition">
+                Use Minimal Template
+              </button>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION 7: TICKET VERIFICATION (CHECKPOINT GATE) -->
+        <section id="view-verification" class="space-y-6 hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Ticket Verification Checkpoint</h2>
+              <p class="text-xs text-slate-400">Validate digital passes at entrance gates using QR Scanner or Monospace Ticket ID</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-3 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-800 text-emerald-400 text-xs font-mono flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Turnstile Gate Online
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            <!-- Left: Scan Engine / ID Input (5 cols) -->
+            <div class="lg:col-span-5 bg-[#0f172a] border border-slate-800/80 p-6 rounded-2xl space-y-6">
+              
+              <!-- Futuristic Laser Scanner Graphic -->
+              <div class="relative w-full h-48 rounded-2xl bg-black border border-cyan-900/60 overflow-hidden flex flex-col items-center justify-center">
+                <!-- Laser line -->
+                <div class="laser-line"></div>
+                
+                <!-- Target Reticle -->
+                <div class="w-32 h-32 border-2 border-dashed border-cyan-500/40 rounded-2xl flex items-center justify-center relative">
+                  <div class="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-cyan-400"></div>
+                  <div class="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-cyan-400"></div>
+                  <div class="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-cyan-400"></div>
+                  <div class="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-cyan-400"></div>
+                  <i data-lucide="qr-code" class="w-12 h-12 text-cyan-400/40 animate-pulse"></i>
+                </div>
+                
+                <span class="text-[10px] font-mono text-cyan-300 mt-2 tracking-widest uppercase">OPTICAL SENSOR ACTIVE</span>
+              </div>
+
+              <!-- Quick Demo Verification Picker -->
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Quick Select Issued Ticket for Gate Test</label>
+                <select id="verify-quick-select" onchange="onQuickSelectTicketToVerify()" class="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono">
+                  <!-- Filled via JS -->
+                </select>
+              </div>
+
+              <!-- Manual ID Search -->
+              <div class="space-y-2">
+                <label class="block text-xs font-medium text-slate-300">Or Enter Monospace Ticket ID</label>
+                <div class="flex gap-2">
+                  <input type="text" id="verify-ticket-id-input" placeholder="e.g. BDH-VIP-2026-004" class="flex-1 px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono uppercase focus:outline-none focus:border-cyan-500">
+                  <button onclick="handleVerifyManualId()" class="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs transition">
+                    Verify
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Right: Verification Result Card (7 cols) -->
+            <div class="lg:col-span-7 bg-[#0f172a] border border-slate-800/80 p-6 md:p-8 rounded-2xl min-h-[420px] flex flex-col justify-center">
+              
+              <!-- Result Container -->
+              <div id="verify-result-box" class="text-center py-8">
+                <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-3 text-slate-500">
+                  <i data-lucide="scan" class="w-8 h-8"></i>
+                </div>
+                <h3 class="text-lg font-bold text-white">Awaiting Ticket Scan</h3>
+                <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">Select an issued ticket from dropdown or enter ticket code to validate admission credentials</p>
+              </div>
+
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION 8: GENERATED TICKETS LIST -->
+        <section id="view-generated-tickets" class="space-y-6 hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Generated Tickets Archive</h2>
+              <p class="text-xs text-slate-400">Search, filter, view passes, download high-res PNG/PDF or revoke admission credentials</p>
+            </div>
+            <button onclick="navigateTo('generator')" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition flex items-center gap-2 self-start">
+              <i data-lucide="plus" class="w-4 h-4"></i> Issue New Ticket
+            </button>
+          </div>
+
+          <!-- Filters Row -->
+          <div class="bg-[#0f172a] border border-slate-800/80 p-4 rounded-2xl flex flex-wrap gap-3 items-center justify-between">
+            <div class="flex flex-wrap gap-2 items-center flex-1">
+              <div class="relative w-64">
+                <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="tickets-filter-search" oninput="renderGeneratedTicketsTable()" placeholder="Search holder, ID, seat..." class="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white">
+              </div>
+
+              <select id="tickets-filter-status" onchange="renderGeneratedTicketsTable()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white">
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="USED">USED</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+
+              <select id="tickets-filter-category" onchange="renderGeneratedTicketsTable()" class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white">
+                <option value="">All Categories</option>
+                <option value="GENERAL">GENERAL</option>
+                <option value="SILVER">SILVER</option>
+                <option value="GOLD">GOLD</option>
+                <option value="VIP">VIP</option>
+                <option value="VVIP">VVIP</option>
+              </select>
+            </div>
+
+            <span id="tickets-table-count" class="text-xs font-mono text-slate-400">5 tickets loaded</span>
+          </div>
+
+          <!-- Tickets Table -->
+          <div class="bg-[#0f172a] border border-slate-800/80 rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-900/80 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
+                  <tr>
+                    <th class="py-3 px-4">Ticket ID</th>
+                    <th class="py-3 px-4">Holder</th>
+                    <th class="py-3 px-4">Event</th>
+                    <th class="py-3 px-4">Tier</th>
+                    <th class="py-3 px-4">Seat / Gate</th>
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tickets-table-body" class="divide-y divide-slate-800/60 font-sans">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 9: ATTENDEES ROSTER -->
+        <section id="view-attendees" class="space-y-6 hidden">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-bold text-white">Attendee Directory</h2>
+              <p class="text-xs text-slate-400">Real-time gate check-in status, phone records, and pass allocation</p>
+            </div>
+          </div>
+
+          <div class="bg-[#0f172a] border border-slate-800/80 rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-900/80 text-slate-400 font-mono uppercase text-[10px] border-b border-slate-800">
+                  <tr>
+                    <th class="py-3 px-4">Name</th>
+                    <th class="py-3 px-4">Contact</th>
+                    <th class="py-3 px-4">Associated Pass ID</th>
+                    <th class="py-3 px-4">Category</th>
+                    <th class="py-3 px-4">Check-in State</th>
+                    <th class="py-3 px-4 text-right">Profile</th>
+                  </tr>
+                </thead>
+                <tbody id="attendees-table-body" class="divide-y divide-slate-800/60">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 10: ANALYTICS -->
+        <section id="view-analytics" class="space-y-6 hidden">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Concert Ticketing Analytics</h2>
+            <p class="text-xs text-slate-400">Financial velocity, attendance turnout, and gate check-in performance metrics</p>
+          </div>
+
+          <!-- Key Metrics -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl">
+              <span class="text-xs text-slate-400 font-mono">GROSS VALUE</span>
+              <div id="analytics-gross-revenue" class="text-2xl font-extrabold font-mono text-amber-400 mt-1">₹0</div>
+              <p class="text-[11px] text-slate-500 mt-1">Calculated from issued passes</p>
+            </div>
+            <div class="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl">
+              <span class="text-xs text-slate-400 font-mono">ATTENDANCE RATE</span>
+              <div id="analytics-attendance-rate" class="text-2xl font-extrabold font-mono text-emerald-400 mt-1">0%</div>
+              <p class="text-[11px] text-slate-500 mt-1">Verified at gate turnstiles</p>
+            </div>
+            <div class="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl">
+              <span class="text-xs text-slate-400 font-mono">VIP / PREMIUM SHARE</span>
+              <div id="analytics-vip-share" class="text-2xl font-extrabold font-mono text-purple-400 mt-1">0%</div>
+              <p class="text-[11px] text-slate-500 mt-1">Ratio of VIP & VVIP tiers</p>
+            </div>
+            <div class="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl">
+              <span class="text-xs text-slate-400 font-mono">REVOKED / CANCELLED</span>
+              <div id="analytics-cancelled-count" class="text-2xl font-extrabold font-mono text-rose-400 mt-1">0</div>
+              <p class="text-[11px] text-slate-500 mt-1">Invalidated passes</p>
+            </div>
+          </div>
+
+          <!-- Chart Area -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Simulated Activity Bar Chart -->
+            <div class="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl">
+              <h3 class="text-sm font-bold text-white mb-2">Hourly Check-in Volume</h3>
+              <p class="text-xs text-slate-400 mb-6">Real-time gate entry velocity throughout concert night</p>
+              
+              <div class="flex items-end justify-between h-44 gap-2 pt-6 border-b border-slate-800 px-2">
+                <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                  <div class="w-full bg-cyan-900/60 rounded-t h-[15%]"></div>
+                  <span class="text-[9px] font-mono text-slate-500">17:00</span>
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                  <div class="w-full bg-cyan-800/80 rounded-t h-[35%]"></div>
+                  <span class="text-[9px] font-mono text-slate-500">18:00</span>
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                  <div class="w-full bg-gradient-to-t from-cyan-600 to-indigo-500 rounded-t h-[90%] shadow-lg shadow-cyan-500/20"></div>
+                  <span class="text-[9px] font-mono text-cyan-400 font-bold">19:00</span>
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                  <div class="w-full bg-gradient-to-t from-cyan-600 to-indigo-500 rounded-t h-[75%]"></div>
+                  <span class="text-[9px] font-mono text-slate-400">20:00</span>
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                  <div class="w-full bg-cyan-900/70 rounded-t h-[40%]"></div>
+                  <span class="text-[9px] font-mono text-slate-500">21:00</span>
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                  <div class="w-full bg-cyan-950 rounded-t h-[10%]"></div>
+                  <span class="text-[9px] font-mono text-slate-500">22:00</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Category Share Breakdown -->
+            <div class="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl">
+              <h3 class="text-sm font-bold text-white mb-2">Gate Readiness Summary</h3>
+              <p class="text-xs text-slate-400 mb-4">Overall inventory security check status</p>
+              
+              <div id="analytics-summary-items" class="space-y-3 pt-2">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 11: SYSTEM ARCHITECTURE & DFD -->
+        <section id="view-dfd" class="space-y-6 hidden">
+          <div>
+            <h2 class="text-2xl font-bold text-white">System Architecture & Data Flow Diagrams</h2>
+            <p class="text-xs text-slate-400">Formal engineering specification as outlined in BODHAI SDD Section 17-20</p>
+          </div>
+
+          <!-- Architecture Overview -->
+          <div class="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl space-y-6">
+            <h3 class="text-sm font-mono uppercase text-cyan-400 tracking-wider">System Architecture Model</h3>
+            
+            <div class="p-6 bg-slate-950 rounded-xl border border-slate-800/80 font-mono text-xs overflow-x-auto text-slate-300 leading-relaxed">
+<pre class="text-cyan-400 font-bold mb-2">           ┌─────────────────────────────────────────────────────────────┐
+           │                   ORGANIZER / GATE ADMIN                    │
+           └──────────────────────────────┬──────────────────────────────┘
+                                          │
+                                          ▼
+           ┌─────────────────────────────────────────────────────────────┐
+           │                      BODHAI SYSTEM UI                       │
+           │  Dashboard • Event Studio • Ticket Engine • Pass Designer   │
+           └──────────────────────────────┬──────────────────────────────┘
+                                          │
+             ┌────────────────────────────┼────────────────────────────┐
+             ▼                            ▼                            ▼
+   ┌───────────────────┐        ┌───────────────────┐        ┌───────────────────┐
+   │   EVENT MANAGER   │        │   TICKET ENGINE   │        │   PASS DESIGNER   │
+   │  Roster & Venues  │        │ Unique ID + QR Gen│        │  Lanyards & Badges│
+   └─────────┬─────────┘        └─────────┬─────────┘        └─────────┬─────────┘
+             │                            │                            │
+             └────────────────────────────┼────────────────────────────┘
+                                          ▼
+                               ┌─────────────────────┐
+                               │   GENERATED PASS    │
+                               │  Encrypted Payload  │
+                               └──────────┬──────────┘
+                                          │
+                         ┌────────────────┴────────────────┐
+                         ▼                                 ▼
+                 ┌───────────────┐                 ┌───────────────┐
+                 │ DOWNLOAD / PDF│                 │  GATE PRINT   │
+                 └───────────────┘                 └───────────────┘
+                                          │
+                                          ▼
+                               ┌─────────────────────┐
+                               │   QR VERIFICATION   │
+                               │ Gate Sensor / Auth  │
+                               └──────────┬──────────┘
+                                          │
+                             ┌────────────┴────────────┐
+                             ▼                         ▼
+                       [VALID TICKET]          [INVALID / USED]
+                             │
+                             ▼
+                     ┌───────────────┐
+                     │   MARK USED   │ ──► [ANALYTICS DB]
+                     └───────────────┘</pre>
+            </div>
+          </div>
+
+          <!-- DFD Level 0 & Level 1 -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl">
+              <h4 class="font-mono text-xs uppercase text-purple-400 mb-2">DFD Level 0 — Context Level</h4>
+              <p class="text-xs text-slate-400 mb-4">External entities exchange with core BODHAI ticketing boundary</p>
+              <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300">
+                <p class="text-cyan-300 font-semibold mb-2">ENTITIES & DATAFLOWS:</p>
+                <ul class="space-y-1.5 list-disc list-inside text-slate-400">
+                  <li><b class="text-white">Admin</b> ➔ Event Details, Tier Pricing, Terms ➔ <b class="text-cyan-400">BODHAI</b></li>
+                  <li><b class="text-cyan-400">BODHAI</b> ➔ Pass ID, Verifiable QR Payload ➔ <b class="text-white">Attendee</b></li>
+                  <li><b class="text-white">Turnstile Gate Operator</b> ➔ Scanned QR / Pass ID ➔ <b class="text-cyan-400">BODHAI</b></li>
+                  <li><b class="text-cyan-400">BODHAI</b> ➔ Check-in Authorization & Roster Update ➔ <b class="text-emerald-400">Gate</b></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl">
+              <h4 class="font-mono text-xs uppercase text-amber-400 mb-2">DFD Level 1 — Modular Processes</h4>
+              <p class="text-xs text-slate-400 mb-4">Functional subprocesses and localStorage data stores</p>
+              <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300">
+                <p class="text-amber-300 font-semibold mb-2">PIPELINE PROCESSES:</p>
+                <ol class="space-y-1.5 list-decimal list-inside text-slate-400">
+                  <li><b class="text-white">Process 1.0 Event Management:</b> Saves to <code class="text-cyan-300">bodhai_events</code></li>
+                  <li><b class="text-white">Process 2.0 Ticket Generation:</b> Creates Ticket ID & QR</li>
+                  <li><b class="text-white">Process 3.0 Pass Rendering:</b> Applies theme matrix</li>
+                  <li><b class="text-white">Process 4.0 Gate Verification:</b> Updates <code class="text-emerald-300">bodhai_tickets</code> status</li>
+                  <li><b class="text-white">Process 5.0 Analytics Engine:</b> Aggregates realtime ROI</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 12: SETTINGS & STORAGE MANAGEMENT -->
+        <section id="view-settings" class="space-y-6 hidden">
+          <div>
+            <h2 class="text-2xl font-bold text-white">System Settings & Local Data</h2>
+            <p class="text-xs text-slate-400">Client-side persistence control, JSON database backups, and environment reset</p>
+          </div>
+
+          <div class="max-w-2xl bg-[#0f172a] border border-slate-800 p-6 rounded-2xl space-y-6">
+            <div>
+              <h3 class="text-sm font-semibold text-white">Storage Status</h3>
+              <p class="text-xs text-slate-400 mt-0.5">BODHAI uses browser LocalStorage for 100% offline, persistent demo execution.</p>
+              
+              <div class="grid grid-cols-2 gap-4 mt-4">
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800">
+                  <span class="text-[10px] font-mono text-slate-400">DATABASE STATUS</span>
+                  <div class="text-sm font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Connected
+                  </div>
+                </div>
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800">
+                  <span class="text-[10px] font-mono text-slate-400">STORAGE ENGINES</span>
+                  <div class="text-sm font-bold text-cyan-400 mt-0.5">LocalStorage ES6</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800 space-y-3">
+              <h3 class="text-sm font-semibold text-white">Backup & Portability</h3>
+              <div class="flex flex-wrap gap-3">
+                <button onclick="exportDatabaseJSON()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition flex items-center gap-2">
+                  <i data-lucide="download" class="w-4 h-4 text-cyan-400"></i> Export JSON Backup
+                </button>
+                <label class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition flex items-center gap-2 cursor-pointer">
+                  <i data-lucide="upload" class="w-4 h-4 text-purple-400"></i> Import JSON Backup
+                  <input type="file" id="import-json-file" accept=".json" onchange="importDatabaseJSON(event)" class="hidden">
+                </label>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800 space-y-3">
+              <h3 class="text-sm font-semibold text-rose-400">Factory Reset Demo Data</h3>
+              <p class="text-xs text-slate-400">Erase current state and re-initialize with factory default concerts and passes.</p>
+              <button onclick="resetFactoryDemoData()" class="px-4 py-2 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-bold transition flex items-center gap-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i> Reset to Default Demo Data
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- FOOTER -->
+      <footer class="h-12 border-t border-slate-800/80 bg-[#0c1322] px-6 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+        <div>
+          © 2026 <span class="text-slate-400 font-bold">BODHAI</span> — EVENT TECHNOLOGY
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-slate-400">Turnstile Engine v2.6</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+          <span>Single-File Enterprise Edition</span>
+        </div>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- MODAL: View Full Ticket Modal -->
+  <div id="ticket-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-[#0f172a] border border-slate-700 rounded-3xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i data-lucide="ticket" class="w-5 h-5 text-cyan-400"></i> Pass Inspector
+        </h3>
+        <button onclick="closeModal('ticket-modal')" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="modal-ticket-render-target" class="flex justify-center overflow-x-auto py-2">
+        <!-- Ticket clone inserted here -->
+      </div>
+
+      <div class="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-800">
+        <button id="modal-download-png-btn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition">Download PNG</button>
+        <button id="modal-download-pdf-btn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition">Download PDF</button>
+        <button id="modal-print-btn" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs transition">Print Pass</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Attendee Profile Modal -->
+  <div id="attendee-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-[#0f172a] border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl relative">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white">Attendee Credentials</h3>
+        <button onclick="closeModal('attendee-modal')" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div id="attendee-modal-content" class="space-y-4">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- DEDICATED PRINT AREA (Visible ONLY during print via CSS) -->
+  <div id="print-ticket-area" class="hidden"></div>
+
+  <script>
+    /*
+     * BODHAI Event Technology — Client Architecture
+     * Storage Keys:
+     * - bodhai_events
+     * - bodhai_tickets
+     * - bodhai_attendees
+     * - bodhai_settings
+     */
+
+    const STORAGE_KEYS = {
+      EVENTS: 'bodhai_events',
+      TICKETS: 'bodhai_tickets',
+      ATTENDEES: 'bodhai_attendees',
+      SETTINGS: 'bodhai_settings'
+    };
+
+    // State Variables
+    let currentTheme = 'obsidian';
+    let currentPassAccent = '#06b6d4';
+    let liveQrCodeInstance = null;
+    let livePassQrInstance = null;
+
+    // Default Demo Data Set
+    const DEMO_EVENT = {
+      id: 'EV-2026-BDH01',
+      name: 'BODHAI MUSIC NIGHT',
+      subtitle: 'The Ultimate Live Audio Experience',
+      artist: 'The Midnight Waves',
+      artistImage: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&q=80',
+      bannerImage: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80',
+      venue: 'Bodh Ghat Arena',
+      address: 'Outer Ring Riverfront, Varanasi, Uttar Pradesh 221001',
+      city: 'Varanasi',
+      date: '2026-12-25',
+      startTime: '19:00',
+      endTime: '23:30',
+      organizer: 'Bodhai Live Entertainment',
+      description: 'A futuristic celebration of electronic synthesis, traditional percussion, and high-intensity laser visuals.',
+      categories: [
+        { name: 'GENERAL', price: 499, seats: 1000 },
+        { name: 'SILVER', price: 999, seats: 500 },
+        { name: 'GOLD', price: 1499, seats: 300 },
+        { name: 'VIP', price: 2499, seats: 200 },
+        { name: 'VVIP', price: 4999, seats: 50 }
+      ],
+      createdAt: '2026-10-01T10:00:00.000Z'
+    };
+
+    const DEMO_TICKETS = [
+      {
+        id: 'BDH-GEN-2026-001',
+        eventId: 'EV-2026-BDH01',
+        holderName: 'Aarav Sharma',
+        phone: '+91 98111 22334',
+        email: 'aarav.sharma@example.com',
+        category: 'GENERAL',
+        price: 499,
+        seat: 'GEN-104',
+        row: 'ROW 12',
+        gate: 'GATE C',
+        qrData: 'BDH-GEN-2026-001|EV-2026-BDH01|GENERAL|Aarav Sharma|2026-12-25',
+        status: 'ACTIVE',
+        usedAt: null,
+        theme: 'obsidian',
+        createdAt: '2026-10-02T11:20:00.000Z'
+      },
+      {
+        id: 'BDH-SLV-2026-002',
+        eventId: 'EV-2026-BDH01',
+        holderName: 'Priya Verma',
+        phone: '+91 98222 33445',
+        email: 'priya.verma@example.com',
+        category: 'SILVER',
+        price: 999,
+        seat: 'SLV-42',
+        row: 'ROW 08',
+        gate: 'GATE B',
+        qrData: 'BDH-SLV-2026-002|EV-2026-BDH01|SILVER|Priya Verma|2026-12-25',
+        status: 'USED',
+        usedAt: '2026-10-06T19:34:00.000Z',
+        theme: 'neon',
+        createdAt: '2026-10-02T12:00:00.000Z'
+      },
+      {
+        id: 'BDH-GOLD-2026-003',
+        eventId: 'EV-2026-BDH01',
+        holderName: 'Vikramaditya Roy',
+        phone: '+91 98333 44556',
+        email: 'v.roy@example.com',
+        category: 'GOLD',
+        price: 1499,
+        seat: 'GLD-18',
+        row: 'ROW 05',
+        gate: 'GATE B',
+        qrData: 'BDH-GOLD-2026-003|EV-2026-BDH01|GOLD|Vikramaditya Roy|2026-12-25',
+        status: 'ACTIVE',
+        usedAt: null,
+        theme: 'gold',
+        createdAt: '2026-10-03T15:10:00.000Z'
+      },
+      {
+        id: 'BDH-VIP-2026-004',
+        eventId: 'EV-2026-BDH01',
+        holderName: 'Raj Gautam',
+        phone: '+91 98765 43210',
+        email: 'raj.gautam@bodhai.tech',
+        category: 'VIP',
+        price: 2499,
+        seat: 'VIP-24',
+        row: 'ROW 04',
+        gate: 'GATE A',
+        qrData: 'BDH-VIP-2026-004|EV-2026-BDH01|VIP|Raj Gautam|2026-12-25',
+        status: 'ACTIVE',
+        usedAt: null,
+        theme: 'obsidian',
+        createdAt: '2026-10-04T09:40:00.000Z'
+      },
+      {
+        id: 'BDH-VVIP-2026-005',
+        eventId: 'EV-2026-BDH01',
+        holderName: 'Ananya Deshmukh',
+        phone: '+91 98555 66778',
+        email: 'ananya.d@example.com',
+        category: 'VVIP',
+        price: 4999,
+        seat: 'VVIP-02',
+        row: 'ROW 01',
+        gate: 'GATE VIP',
+        qrData: 'BDH-VVIP-2026-005|EV-2026-BDH01|VVIP|Ananya Deshmukh|2026-12-25',
+        status: 'CANCELLED',
+        usedAt: null,
+        theme: 'festival',
+        createdAt: '2026-10-05T14:15:00.000Z'
+      }
+    ];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initApp();
+      lucide.createIcons();
+    });
+
+    function initApp() {
+      // Seed Demo data if absent
+      if (!localStorage.getItem(STORAGE_KEYS.EVENTS)) {
+        localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify([DEMO_EVENT]));
+      }
+      if (!localStorage.getItem(STORAGE_KEYS.TICKETS)) {
+        localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(DEMO_TICKETS));
+      }
+      if (!localStorage.getItem(STORAGE_KEYS.ATTENDEES)) {
+        syncAttendeesFromTickets();
+      }
+
+      // Initialize UI Event Listeners
+      initEventListeners();
+
+      // Populate Selectors and Live Components
+      populateEventSelectDropdown();
+      updateDashboardStats();
+      renderEventsList();
+      renderGeneratedTicketsTable();
+      renderAttendeesTable();
+      populateVerifyDropdown();
+      updateLiveTicketPreview();
+      updateLivePassPreview();
+    }
+
+    function initEventListeners() {
+      // Mobile Drawer Toggle
+      const mobileToggle = document.getElementById('mobile-sidebar-toggle');
+      const sidebar = document.getElementById('sidebar');
+      if (mobileToggle) {
+        mobileToggle.addEventListener('click', () => {
+          sidebar.classList.toggle('-translate-x-full');
+        });
+      }
+
+      // Base64 File Readers
+      const bannerInput = document.getElementById('ev-banner-input');
+      if (bannerInput) {
+        bannerInput.addEventListener('change', (e) => handleImageUpload(e, 'ev-banner-preview'));
+      }
+      const artistInput = document.getElementById('ev-artist-input');
+      if (artistInput) {
+        artistInput.addEventListener('change', (e) => handleImageUpload(e, 'ev-artist-preview'));
+      }
+
+      // Global Search
+      const searchBox = document.getElementById('global-search');
+      if (searchBox) {
+        searchBox.addEventListener('keyup', (e) => {
+          if (e.key === 'Enter') {
+            const query = e.target.value.trim().toLowerCase();
+            if (query) {
+              navigateTo('generated-tickets');
+              const filterInput = document.getElementById('tickets-filter-search');
+              if (filterInput) {
+                filterInput.value = query;
+                renderGeneratedTicketsTable();
+              }
+            }
+          }
+        });
+      }
+    }
+
+    function navigateTo(viewId) {
+      // Hide all views
+      const views = document.querySelectorAll('main > section');
+      views.forEach(v => v.classList.add('hidden'));
+
+      // Show selected view
+      const target = document.getElementById(`view-${viewId}`);
+      if (target) {
+        target.classList.remove('hidden');
+      }
+
+      // Update Navigation styling
+      const navButtons = document.querySelectorAll('.nav-item');
+      navButtons.forEach(btn => {
+        const isMatch = btn.getAttribute('data-nav') === viewId;
+        if (isMatch) {
+          btn.className = "nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-cyan-400 bg-cyan-950/40 border border-cyan-800/40";
+        } else {
+          btn.className = "nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition text-slate-400 hover:text-slate-100 hover:bg-slate-800/40";
+        }
+      });
+
+      // Update Top Title and Breadcrumb
+      const pageTitleMap = {
+        'dashboard': 'Executive Dashboard',
+        'events': 'Events & Concerts Directory',
+        'create-event': 'Create New Concert',
+        'generator': 'Concert Pass & Ticket Studio',
+        'pass-designer': 'VIP & Backstage Pass Designer',
+        'templates': 'Concert Pass Templates',
+        'verification': 'Checkpoint Gate Verification',
+        'generated-tickets': 'Archive & Export Passes',
+        'attendees': 'Attendee Roster Directory',
+        'analytics': 'Ticketing Velocity & Analytics',
+        'dfd': 'Architecture & DFD Specification',
+        'settings': 'Data Persistence & Storage Settings'
+      };
+
+      document.getElementById('nav-breadcrumb').innerText = viewId.replace('-', ' ');
+      document.getElementById('page-title').innerText = pageTitleMap[viewId] || 'Bodhai Studio';
+
+      // Refresh data on specific page entries
+      if (viewId === 'dashboard') updateDashboardStats();
+      if (viewId === 'events') renderEventsList();
+      if (viewId === 'generator') updateLiveTicketPreview();
+      if (viewId === 'verification') populateVerifyDropdown();
+      if (viewId === 'generated-tickets') renderGeneratedTicketsTable();
+      if (viewId === 'attendees') renderAttendeesTable();
+      if (viewId === 'analytics') updateAnalyticsView();
+
+      // Close mobile sidebar on navigation
+      document.getElementById('sidebar').classList.add('-translate-x-full');
+
+      // Re-trigger icon rendering for freshly unhidden elements
+      setTimeout(() => lucide.createIcons(), 50);
+    }
+
+    function handleImageUpload(event, previewId) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showToast('Please select a valid image file', 'error');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64 = e.target.result;
+        const previewContainer = document.getElementById(previewId);
+        previewContainer.innerHTML = `<img src="${base64}" class="w-full h-full object-cover">`;
+        previewContainer.dataset.base64 = base64;
+        showToast('Image uploaded and encoded successfully', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function getStoredEvents() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.EVENTS) || '[]');
+    }
+
+    function saveEvents(events) {
+      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
+      updateDashboardStats();
+      populateEventSelectDropdown();
+    }
+
+    function addCustomCategoryRow() {
+      const builder = document.getElementById('categories-builder');
+      const row = document.createElement('div');
+      row.className = "category-row grid grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800";
+      row.innerHTML = `
+        <input type="text" class="col-span-5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-name" placeholder="CATEGORY NAME" value="VIP LOUNGE">
+        <input type="number" class="col-span-4 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-price" value="1999" placeholder="Price ₹">
+        <input type="number" class="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white cat-seats" value="150" placeholder="Seats">
+        <button type="button" onclick="this.closest('.category-row').remove()" class="col-span-1 text-slate-500 hover:text-rose-400 flex justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      `;
+      builder.appendChild(row);
+      lucide.createIcons();
+    }
+
+    function handleCreateEvent(event) {
+      event.preventDefault();
+      
+      const name = document.getElementById('ev-name').value.trim();
+      const subtitle = document.getElementById('ev-subtitle').value.trim();
+      const artist = document.getElementById('ev-artist').value.trim();
+      const organizer = document.getElementById('ev-organizer').value.trim();
+      const venue = document.getElementById('ev-venue').value.trim();
+      const city = document.getElementById('ev-city').value.trim();
+      const address = document.getElementById('ev-address').value.trim();
+      const date = document.getElementById('ev-date').value;
+      const startTime = document.getElementById('ev-start-time').value;
+      const endTime = document.getElementById('ev-end-time').value;
+      const description = document.getElementById('ev-desc').value.trim();
+
+      // Retrieve Uploaded Images or Fallback Unsplash visuals
+      const bannerPreview = document.getElementById('ev-banner-preview');
+      const artistPreview = document.getElementById('ev-artist-preview');
+      const bannerImage = bannerPreview.dataset.base64 || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80';
+      const artistImage = artistPreview.dataset.base64 || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&q=80';
+
+      // Parse Category Rows
+      const rows = document.querySelectorAll('#categories-builder .category-row');
+      const categories = [];
+      rows.forEach(r => {
+        const catName = r.querySelector('.cat-name').value.trim().toUpperCase();
+        const price = Number(r.querySelector('.cat-price').value) || 0;
+        const seats = Number(r.querySelector('.cat-seats').value) || 100;
+        if (catName) {
+          categories.push({ name: catName, price, seats });
+        }
+      });
+
+      if (categories.length === 0) {
+        showToast('Please specify at least one ticket category', 'error');
+        return;
+      }
+
+      const newEvent = {
+        id: `EV-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        name,
+        subtitle: subtitle || 'Live Music Concert',
+        artist,
+        artistImage,
+        bannerImage,
+        venue,
+        address,
+        city,
+        date,
+        startTime,
+        endTime,
+        organizer,
+        description,
+        categories,
+        createdAt: new Date().toISOString()
+      };
+
+      const events = getStoredEvents();
+      events.push(newEvent);
+      saveEvents(events);
+
+      showToast(`Concert "${name}" launched successfully!`, 'success');
+      document.getElementById('create-event-form').reset();
+      navigateTo('events');
+    }
+
+    function renderEventsList() {
+      const container = document.getElementById('events-list-container');
+      const events = getStoredEvents();
+
+      if (events.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full py-16 text-center bg-[#0f172a] rounded-2xl border border-dashed border-slate-800">
+            <i data-lucide="calendar-x" class="w-12 h-12 text-slate-500 mx-auto mb-3"></i>
+            <h3 class="text-base font-bold text-white">No Concerts Registered Yet</h3>
+            <p class="text-xs text-slate-400 mt-1 mb-4">Create your first concert event to start generating admission passes.</p>
+            <button onclick="navigateTo('create-event')" class="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold text-xs">Create Event</button>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = events.map(ev => `
+        <div class="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden flex flex-col justify-between hover:border-cyan-500/40 transition">
+          <div>
+            <div class="relative h-44 w-full overflow-hidden bg-slate-900">
+              <img src="${ev.bannerImage}" alt="${ev.name}" class="w-full h-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-black/30 to-transparent"></div>
+              <span class="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-800">
+                ${ev.city}
+              </span>
+            </div>
+            <div class="p-5">
+              <span class="text-[11px] font-mono text-cyan-400 font-bold uppercase tracking-wider">${ev.artist}</span>
+              <h3 class="text-lg font-bold text-white mt-0.5">${ev.name}</h3>
+              <p class="text-xs text-slate-400 line-clamp-2 mt-1">${ev.description || ev.subtitle}</p>
+
+              <div class="mt-4 pt-3 border-t border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono text-slate-300">
+                <div class="flex items-center gap-1.5">
+                  <i data-lucide="calendar" class="w-3.5 h-3.5 text-cyan-400"></i>
+                  <span>${ev.date}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <i data-lucide="clock" class="w-3.5 h-3.5 text-purple-400"></i>
+                  <span>${ev.startTime}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-5 pt-0 flex gap-2">
+            <button onclick="selectEventForTicketGen('${ev.id}')" class="flex-1 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5">
+              <i data-lucide="ticket" class="w-3.5 h-3.5"></i> Issue Pass
+            </button>
+            <button onclick="deleteEvent('${ev.id}')" class="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 hover:text-rose-400 text-slate-400 transition" title="Delete event">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      lucide.createIcons();
+    }
+
+    function deleteEvent(id) {
+      const events = getStoredEvents();
+      const updated = events.filter(e => e.id !== id);
+      saveEvents(updated);
+      renderEventsList();
+      showToast('Event removed from system', 'info');
+    }
+
+    function selectEventForTicketGen(eventId) {
+      navigateTo('generator');
+      const select = document.getElementById('gen-event-select');
+      if (select) {
+        select.value = eventId;
+        onGeneratorEventChange();
+      }
+    }
+
+    function populateEventSelectDropdown() {
+      const select = document.getElementById('gen-event-select');
+      if (!select) return;
+      const events = getStoredEvents();
+      
+      select.innerHTML = events.map(e => `
+        <option value="${e.id}">${e.name} — ${e.artist} (${e.city})</option>
+      `).join('');
+
+      onGeneratorEventChange();
+    }
+
+    function onGeneratorEventChange() {
+      const eventSelect = document.getElementById('gen-event-select');
+      const catSelect = document.getElementById('gen-category-select');
+      if (!eventSelect || !catSelect) return;
+
+      const events = getStoredEvents();
+      const selected = events.find(e => e.id === eventSelect.value) || events[0];
+
+      if (selected && selected.categories) {
+        catSelect.innerHTML = selected.categories.map(c => `
+          <option value="${c.name}" data-price="${c.price}">${c.name} (₹${c.price})</option>
+        `).join('');
+      }
+
+      onGeneratorCategoryChange();
+      updateLiveTicketPreview();
+    }
+
+    function onGeneratorCategoryChange() {
+      const catSelect = document.getElementById('gen-category-select');
+      const priceInput = document.getElementById('gen-price');
+      if (!catSelect || !priceInput) return;
+
+      const opt = catSelect.options[catSelect.selectedIndex];
+      if (opt && opt.dataset.price) {
+        priceInput.value = opt.dataset.price;
+      }
+      updateLiveTicketPreview();
+    }
+
+    function generateUniqueTicketId(category) {
+      const prefix = 'BDH';
+      const year = new Date().getFullYear();
+      const catCode = (category || 'GEN').substring(0, 3).toUpperCase();
+      const randomHex = Math.random().toString(36).substring(2, 8).toUpperCase();
+      return `${prefix}-${year}-${catCode}-${randomHex}`;
+    }
+
+    function setTicketTheme(theme) {
+      currentTheme = theme;
+      const ticketCard = document.getElementById('live-ticket-render');
+      if (!ticketCard) return;
+
+      // Clean old themes
+      ticketCard.className = `relative w-[760px] min-w-[760px] rounded-3xl overflow-hidden shadow-2xl transition-all duration-300 flex theme-${theme}`;
+      
+      // Update theme selector buttons active style
+      document.querySelectorAll('.theme-btn').forEach(btn => {
+        if (btn.dataset.theme === theme) {
+          btn.classList.add('border-cyan-500', 'text-cyan-300');
+        } else {
+          btn.classList.remove('border-cyan-500', 'text-cyan-300');
+        }
+      });
+
+      updateLiveTicketPreview();
+    }
+
+    function updateLiveTicketPreview() {
+      const events = getStoredEvents();
+      const eventSelect = document.getElementById('gen-event-select');
+      const selectedEvent = events.find(e => e.id === (eventSelect ? eventSelect.value : '')) || events[0] || DEMO_EVENT;
+
+      const holderName = document.getElementById('gen-holder-name').value.trim() || 'Raj Gautam';
+      const category = document.getElementById('gen-category-select').value || 'VIP';
+      const gate = document.getElementById('gen-gate').value.trim() || 'GATE A';
+      const row = document.getElementById('gen-row').value.trim() || 'ROW 01';
+      const seat = document.getElementById('gen-seat').value.trim() || 'VIP-01';
+
+      // Update Live Preview Elements
+      document.getElementById('ticket-preview-cat-badge').innerText = `${category} ACCESS`;
+      document.getElementById('ticket-preview-stub-cat').innerText = `${category} PASS`;
+      document.getElementById('ticket-preview-artist').innerText = selectedEvent.artist;
+      document.getElementById('ticket-preview-title').innerText = selectedEvent.name;
+      document.getElementById('ticket-preview-subtitle').innerText = selectedEvent.subtitle;
+      document.getElementById('ticket-preview-date').innerText = selectedEvent.date;
+      document.getElementById('ticket-preview-time').innerText = selectedEvent.startTime;
+      document.getElementById('ticket-preview-holder').innerText = holderName;
+      document.getElementById('ticket-preview-venue').innerText = selectedEvent.venue;
+      document.getElementById('ticket-preview-seatrow').innerText = `${seat} / ${row}`;
+      document.getElementById('ticket-preview-gate').innerText = gate;
+      document.getElementById('ticket-preview-banner-img').src = selectedEvent.bannerImage || selectedEvent.artistImage;
+
+      // Generate Preview Ticket ID
+      const previewId = `BDH-${new Date().getFullYear()}-${category.substring(0, 3)}-PREVIEW`;
+      document.getElementById('ticket-preview-id').innerText = previewId;
+
+      // Generate Live QR Code with QRCode.js
+      const qrPayload = JSON.stringify({
+        id: previewId,
+        eventId: selectedEvent.id,
+        category: category,
+        holder: holderName,
+        gate: gate,
+        seat: seat
+      });
+
+      const qrContainer = document.getElementById('ticket-preview-qrcode');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: qrPayload,
+        width: 104,
+        height: 104,
+        colorDark: currentTheme === 'minimal' ? '#000000' : '#050505',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
+    function generateAndSaveTicket() {
+      const events = getStoredEvents();
+      const eventSelect = document.getElementById('gen-event-select');
+      const selectedEvent = events.find(e => e.id === eventSelect.value) || events[0];
+
+      const holderName = document.getElementById('gen-holder-name').value.trim();
+      const phone = document.getElementById('gen-holder-phone').value.trim();
+      const email = document.getElementById('gen-holder-email').value.trim();
+      const category = document.getElementById('gen-category-select').value;
+      const price = Number(document.getElementById('gen-price').value) || 0;
+      const gate = document.getElementById('gen-gate').value.trim();
+      const row = document.getElementById('gen-row').value.trim();
+      const seat = document.getElementById('gen-seat').value.trim();
+
+      if (!holderName) {
+        showToast('Please enter Attendee Full Name', 'error');
+        return;
+      }
+
+      const ticketId = generateUniqueTicketId(category);
+      const qrPayload = `${ticketId}|${selectedEvent.id}|${category}|${holderName}|${selectedEvent.date}`;
+
+      const newTicket = {
+        id: ticketId,
+        eventId: selectedEvent.id,
+        holderName,
+        phone,
+        email,
+        category,
+        price,
+        seat,
+        row,
+        gate,
+        qrData: qrPayload,
+        status: 'ACTIVE',
+        usedAt: null,
+        theme: currentTheme,
+        createdAt: new Date().toISOString()
+      };
+
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      tickets.unshift(newTicket);
+      localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(tickets));
+
+      // Sync Attendee Roster
+      syncAttendeesFromTickets();
+
+      // Update UI components
+      updateDashboardStats();
+      renderGeneratedTicketsTable();
+      renderAttendeesTable();
+      populateVerifyDropdown();
+
+      // Trigger Generation animation and feedback
+      showToast(`Pass Generated: ${ticketId}`, 'success');
+      
+      // Auto-preview generated ticket
+      viewTicketModal(ticketId);
+    }
+
+    function applySampleTicketData() {
+      document.getElementById('gen-holder-name').value = 'Rohan Siddharth';
+      document.getElementById('gen-holder-phone').value = '+91 99887 76655';
+      document.getElementById('gen-holder-email').value = 'rohan.s@bodhai.tech';
+      document.getElementById('gen-gate').value = 'GATE VIP';
+      document.getElementById('gen-row').value = 'ROW 02';
+      document.getElementById('gen-seat').value = 'VIP-11';
+      updateLiveTicketPreview();
+      showToast('Sample credentials loaded', 'info');
+    }
+
+    function setPassAccent(hex) {
+      currentPassAccent = hex;
+      const card = document.getElementById('live-pass-card');
+      const rolePill = document.getElementById('pass-preview-role-pill');
+      if (card && rolePill) {
+        card.style.borderColor = hex;
+        rolePill.style.backgroundColor = hex;
+      }
+    }
+
+    function updateLivePassPreview() {
+      const name = document.getElementById('pass-name-input').value.trim() || 'Arjun Mehta';
+      const role = document.getElementById('pass-role-select').value;
+
+      document.getElementById('pass-preview-name').innerText = name;
+      document.getElementById('pass-preview-role-pill').innerText = role;
+
+      const qrContainer = document.getElementById('pass-preview-qrcode');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: `PASS-CREDENTIAL|${name}|${role}|BODHAI-2026`,
+        width: 80,
+        height: 80,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.L
+      });
+    }
+
+    function downloadPassBadgePNG() {
+      const badge = document.getElementById('live-pass-card');
+      showToast('Compiling high-resolution badge PNG...', 'info');
+      html2canvas(badge, { scale: 2.5, backgroundColor: null }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `BODHAI-BADGE-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('Badge PNG Downloaded!', 'success');
+      });
+    }
+
+    function useTemplateFromGallery(theme) {
+      setTicketTheme(theme);
+      navigateTo('generator');
+      showToast(`Applied ${theme.toUpperCase()} template to Ticket Studio`, 'info');
+    }
+
+    function populateVerifyDropdown() {
+      const select = document.getElementById('verify-quick-select');
+      if (!select) return;
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      
+      select.innerHTML = '<option value="">-- Choose an Issued Ticket to Test Checkpoint --</option>' + 
+        tickets.map(t => `
+          <option value="${t.id}">[${t.status}] ${t.id} — ${t.holderName} (${t.category})</option>
+        `).join('');
+    }
+
+    function onQuickSelectTicketToVerify() {
+      const select = document.getElementById('verify-quick-select');
+      const ticketIdInput = document.getElementById('verify-ticket-id-input');
+      if (select && ticketIdInput) {
+        ticketIdInput.value = select.value;
+        if (select.value) {
+          executeVerification(select.value);
+        }
+      }
+    }
+
+    function handleVerifyManualId() {
+      const idInput = document.getElementById('verify-ticket-id-input');
+      if (!idInput || !idInput.value.trim()) {
+        showToast('Please enter a ticket code', 'error');
+        return;
+      }
+      executeVerification(idInput.value.trim());
+    }
+
+    function executeVerification(ticketId) {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const events = getStoredEvents();
+      const resultBox = document.getElementById('verify-result-box');
+
+      const ticket = tickets.find(t => t.id.toLowerCase() === ticketId.toLowerCase());
+
+      if (!ticket) {
+        // INVALID TICKET STATE
+        resultBox.innerHTML = `
+          <div class="p-6 rounded-2xl bg-rose-950/40 border border-rose-800 text-center space-y-3 animate-fade-in">
+            <div class="w-16 h-16 rounded-full bg-rose-900/60 border border-rose-500 flex items-center justify-center mx-auto text-rose-400">
+              <i data-lucide="x-circle" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-xl font-mono font-bold text-rose-300">✕ INVALID PASS CODE</h3>
+            <p class="text-xs text-rose-200/80 max-w-md mx-auto">
+              No matching record found for ID: <span class="font-mono text-white underline">${ticketId}</span>. Admission denied at turnstile.
+            </p>
+          </div>
+        `;
+        lucide.createIcons();
+        showToast('Verification Failed: Invalid Ticket', 'error');
+        return;
+      }
+
+      const event = events.find(e => e.id === ticket.eventId) || DEMO_EVENT;
+
+      if (ticket.status === 'USED') {
+        // ALREADY USED WARNING
+        resultBox.innerHTML = `
+          <div class="p-6 rounded-2xl bg-amber-950/40 border border-amber-800 text-center space-y-4">
+            <div class="w-16 h-16 rounded-full bg-amber-900/60 border border-amber-500 flex items-center justify-center mx-auto text-amber-400">
+              <i data-lucide="alert-triangle" class="w-10 h-10"></i>
+            </div>
+            <div>
+              <span class="px-3 py-1 rounded-full bg-amber-900 text-amber-300 font-mono text-xs font-bold uppercase">
+                ⚠ ALREADY SCANNED & USED
+              </span>
+              <h3 class="text-xl font-bold text-white mt-2">${ticket.holderName}</h3>
+              <p class="text-xs text-amber-200/80 font-mono mt-1">Checked in at: ${new Date(ticket.usedAt || Date.now()).toLocaleTimeString()}</p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 bg-black/40 p-3 rounded-xl text-xs font-mono max-w-md mx-auto">
+              <div>
+                <span class="text-slate-500 block">CATEGORY</span>
+                <span class="text-white font-bold">${ticket.category}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block">SEAT</span>
+                <span class="text-cyan-400 font-bold">${ticket.seat}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block">GATE</span>
+                <span class="text-purple-400 font-bold">${ticket.gate}</span>
+              </div>
+            </div>
+          </div>
+        `;
+        lucide.createIcons();
+        showToast('Alert: Ticket already checked in', 'info');
+        return;
+      }
+
+      if (ticket.status === 'CANCELLED') {
+        // CANCELLED STATE
+        resultBox.innerHTML = `
+          <div class="p-6 rounded-2xl bg-slate-900 border border-rose-900 text-center space-y-3">
+            <div class="w-14 h-14 rounded-full bg-rose-950 flex items-center justify-center mx-auto text-rose-500">
+              <i data-lucide="ban" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-lg font-bold text-rose-400">REVOKED / CANCELLED PASS</h3>
+            <p class="text-xs text-slate-400">This pass was officially cancelled by event administration.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        showToast('Admission Denied: Pass Cancelled', 'error');
+        return;
+      }
+
+      // VALID PASS STATE
+      resultBox.innerHTML = `
+        <div class="p-6 rounded-2xl bg-emerald-950/30 border border-emerald-800/80 text-center space-y-4">
+          <div class="w-16 h-16 rounded-full bg-emerald-900/50 border border-emerald-400 flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-500/20">
+            <i data-lucide="shield-check" class="w-10 h-10"></i>
+          </div>
+
+          <div>
+            <span class="px-3.5 py-1 rounded-full bg-emerald-950 border border-emerald-700 text-emerald-300 font-mono text-xs font-extrabold uppercase tracking-wider">
+              ✓ VALID TICKET CONFIRMED
+            </span>
+            <h3 class="text-2xl font-display font-extrabold text-white mt-3">${ticket.holderName}</h3>
+            <p class="text-xs text-cyan-400 font-mono">${event.name} • ${event.venue}</p>
+          </div>
+
+          <div class="grid grid-cols-4 gap-2 bg-slate-900/90 border border-slate-800 p-4 rounded-xl text-xs font-mono max-w-lg mx-auto">
+            <div>
+              <span class="text-slate-500 block text-[10px]">PASS ID</span>
+              <span class="text-white font-bold truncate block">${ticket.id}</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[10px]">TIER</span>
+              <span class="text-cyan-400 font-bold">${ticket.category}</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[10px]">GATE</span>
+              <span class="text-purple-400 font-bold">${ticket.gate}</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[10px]">SEAT</span>
+              <span class="text-emerald-400 font-bold">${ticket.seat}</span>
+            </div>
+          </div>
+
+          <button onclick="markTicketAsUsed('${ticket.id}')" class="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-xs tracking-wider uppercase transition shadow-lg shadow-emerald-500/20">
+            Authorize & Mark As Checked In
+          </button>
+        </div>
+      `;
+      lucide.createIcons();
+      showToast('Valid Ticket Verified!', 'success');
+    }
+
+    function markTicketAsUsed(ticketId) {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const index = tickets.findIndex(t => t.id === ticketId);
+      if (index !== -1) {
+        tickets[index].status = 'USED';
+        tickets[index].usedAt = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(tickets));
+
+        syncAttendeesFromTickets();
+        updateDashboardStats();
+        renderGeneratedTicketsTable();
+        renderAttendeesTable();
+        populateVerifyDropdown();
+        executeVerification(ticketId); // refresh view
+
+        showToast(`Pass ${ticketId} checked in successfully!`, 'success');
+      }
+    }
+
+    function renderGeneratedTicketsTable() {
+      const tbody = document.getElementById('tickets-table-body');
+      const counter = document.getElementById('tickets-table-count');
+      if (!tbody) return;
+
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const events = getStoredEvents();
+
+      const search = (document.getElementById('tickets-filter-search')?.value || '').toLowerCase();
+      const statusFilter = document.getElementById('tickets-filter-status')?.value || '';
+      const catFilter = document.getElementById('tickets-filter-category')?.value || '';
+
+      const filtered = tickets.filter(t => {
+        const matchesSearch = t.holderName.toLowerCase().includes(search) || t.id.toLowerCase().includes(search) || t.seat.toLowerCase().includes(search);
+        const matchesStatus = statusFilter ? t.status === statusFilter : true;
+        const matchesCat = catFilter ? t.category === catFilter : true;
+        return matchesSearch && matchesStatus && matchesCat;
+      });
+
+      if (counter) counter.innerText = `${filtered.length} tickets matching`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-8 text-center text-slate-500 font-mono">No tickets found matching the specified filters.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(t => {
+        const event = events.find(e => e.id === t.eventId) || DEMO_EVENT;
+        let badgeColor = 'bg-cyan-950 text-cyan-400 border-cyan-800';
+        if (t.status === 'USED') badgeColor = 'bg-emerald-950 text-emerald-400 border-emerald-800';
+        if (t.status === 'CANCELLED') badgeColor = 'bg-rose-950 text-rose-400 border-rose-800';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 font-mono font-bold text-cyan-400">${t.id}</td>
+            <td class="py-3 px-4">
+              <div class="font-semibold text-white">${t.holderName}</div>
+              <div class="text-[10px] text-slate-500 font-mono">${t.phone || 'No phone'}</div>
+            </td>
+            <td class="py-3 px-4 text-slate-300 truncate max-w-[140px]">${event.name}</td>
+            <td class="py-3 px-4 font-mono font-bold">${t.category}</td>
+            <td class="py-3 px-4 font-mono text-slate-400">${t.seat} / ${t.gate}</td>
+            <td class="py-3 px-4">
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono border ${badgeColor}">${t.status}</span>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="viewTicketModal('${t.id}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300" title="View Pass"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                <button onclick="downloadSpecificTicketPNG('${t.id}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400" title="Download PNG"><i data-lucide="download" class="w-3.5 h-3.5"></i></button>
+                <button onclick="printSpecificTicket('${t.id}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-400" title="Print"><i data-lucide="printer" class="w-3.5 h-3.5"></i></button>
+                <button onclick="toggleCancelTicket('${t.id}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-rose-400" title="Toggle Revoke"><i data-lucide="slash" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    function syncAttendeesFromTickets() {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const attendees = tickets.map(t => ({
+        id: `ATT-${t.id}`,
+        name: t.holderName,
+        phone: t.phone,
+        email: t.email,
+        ticketId: t.id,
+        category: t.category,
+        seat: t.seat,
+        status: t.status,
+        createdAt: t.createdAt
+      }));
+      localStorage.setItem(STORAGE_KEYS.ATTENDEES, JSON.stringify(attendees));
+    }
+
+    function renderAttendeesTable() {
+      const tbody = document.getElementById('attendees-table-body');
+      if (!tbody) return;
+      const attendees = JSON.parse(localStorage.getItem(STORAGE_KEYS.ATTENDEES) || '[]');
+
+      if (attendees.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-500 font-mono">No registered attendees.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = attendees.map(a => `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4 font-bold text-white">${a.name}</td>
+          <td class="py-3 px-4 font-mono text-slate-400">${a.phone || a.email}</td>
+          <td class="py-3 px-4 font-mono text-cyan-400">${a.ticketId}</td>
+          <td class="py-3 px-4 font-mono">${a.category}</td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono ${a.status === 'USED' ? 'text-emerald-400 bg-emerald-950/60' : 'text-slate-400 bg-slate-900'}">${a.status}</span>
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="viewAttendeeProfile('${a.ticketId}')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300">Profile</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function viewAttendeeProfile(ticketId) {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (!ticket) return;
+
+      const content = document.getElementById('attendee-modal-content');
+      content.innerHTML = `
+        <div class="text-center pb-3 border-b border-slate-800">
+          <div class="w-14 h-14 rounded-full bg-cyan-950 border border-cyan-500 flex items-center justify-center font-bold text-cyan-400 text-xl mx-auto mb-2">
+            ${ticket.holderName.charAt(0)}
+          </div>
+          <h4 class="font-bold text-white text-lg">${ticket.holderName}</h4>
+          <p class="text-xs font-mono text-slate-400">${ticket.email}</p>
+        </div>
+
+        <div class="space-y-2 text-xs font-mono">
+          <div class="flex justify-between py-1 border-b border-slate-800/60">
+            <span class="text-slate-500">PHONE:</span>
+            <span class="text-white">${ticket.phone || 'N/A'}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-800/60">
+            <span class="text-slate-500">ASSIGNED PASS:</span>
+            <span class="text-cyan-400 font-bold">${ticket.id}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-800/60">
+            <span class="text-slate-500">PASS TIER:</span>
+            <span class="text-purple-400 font-bold">${ticket.category}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-slate-800/60">
+            <span class="text-slate-500">SEAT / GATE:</span>
+            <span class="text-white">${ticket.seat} / ${ticket.gate}</span>
+          </div>
+          <div class="flex justify-between py-1">
+            <span class="text-slate-500">GATE STATUS:</span>
+            <span class="text-emerald-400 font-bold">${ticket.status}</span>
+          </div>
+        </div>
+      `;
+      openModal('attendee-modal');
+    }
+
+    function toggleCancelTicket(ticketId) {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const index = tickets.findIndex(t => t.id === ticketId);
+      if (index !== -1) {
+        tickets[index].status = tickets[index].status === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED';
+        localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(tickets));
+        syncAttendeesFromTickets();
+        updateDashboardStats();
+        renderGeneratedTicketsTable();
+        showToast(`Pass status changed to ${tickets[index].status}`, 'info');
+      }
+    }
+
+    function viewTicketModal(ticketId) {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (!ticket) return;
+
+      const events = getStoredEvents();
+      const event = events.find(e => e.id === ticket.eventId) || DEMO_EVENT;
+      const target = document.getElementById('modal-ticket-render-target');
+
+      // Build clone of the horizontal ticket
+      target.innerHTML = `
+        <div id="modal-rendered-ticket" class="theme-${ticket.theme || 'obsidian'} relative w-[740px] min-w-[740px] rounded-3xl overflow-hidden shadow-2xl flex">
+          <div class="w-[72%] p-7 flex flex-col justify-between relative border-r border-dashed border-slate-700/80">
+            <div class="ticket-notch-top right-0"></div>
+            <div class="ticket-notch-bottom right-0"></div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500 text-black flex items-center justify-center font-black text-xs">B</div>
+                <div>
+                  <span class="font-display font-black tracking-wider text-sm">BODHAI</span>
+                  <span class="block text-[9px] font-mono tracking-widest text-slate-400">CONCERT PASS</span>
+                </div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase">${ticket.category}</span>
+            </div>
+            <div class="my-5 flex gap-4 items-center">
+              <div class="w-24 h-24 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
+                <img src="${event.bannerImage}" class="w-full h-full object-cover">
+              </div>
+              <div>
+                <span class="text-xs font-mono font-bold uppercase text-cyan-300">${event.artist}</span>
+                <h3 class="text-xl font-display font-extrabold">${event.name}</h3>
+                <p class="text-xs text-slate-400">${event.venue} • ${event.date}</p>
+              </div>
+            </div>
+            <div class="pt-4 border-t border-slate-800/80 grid grid-cols-4 gap-2 text-xs font-mono">
+              <div><span class="text-slate-400 text-[10px] block">HOLDER</span><span class="font-bold text-white">${ticket.holderName}</span></div>
+              <div><span class="text-slate-400 text-[10px] block">GATE</span><span class="font-bold text-purple-400">${ticket.gate}</span></div>
+              <div><span class="text-slate-400 text-[10px] block">SEAT</span><span class="font-bold text-cyan-400">${ticket.seat}</span></div>
+              <div><span class="text-slate-400 text-[10px] block">PRICE</span><span class="font-bold text-amber-400">₹${ticket.price}</span></div>
+            </div>
+          </div>
+          <div class="w-[28%] bg-black/30 p-6 flex flex-col justify-between items-center text-center">
+            <span class="text-[9px] font-mono uppercase text-slate-400">CHECKPOINT STUB</span>
+            <div id="modal-qr-box" class="p-2 bg-white rounded-xl my-2"></div>
+            <div class="text-[10px] font-mono font-bold text-cyan-400">${ticket.id}</div>
+          </div>
+        </div>
+      `;
+
+      new QRCode(document.getElementById('modal-qr-box'), {
+        text: ticket.qrData,
+        width: 90,
+        height: 90,
+        colorDark: '#000000',
+        colorLight: '#ffffff'
+      });
+
+      // Bind modal buttons
+      document.getElementById('modal-download-png-btn').onclick = () => downloadSpecificTicketPNG(ticket.id);
+      document.getElementById('modal-download-pdf-btn').onclick = () => downloadSpecificTicketPDF(ticket.id);
+      document.getElementById('modal-print-btn').onclick = () => printSpecificTicket(ticket.id);
+
+      openModal('ticket-modal');
+    }
+
+    function downloadLiveTicketPNG() {
+      const ticket = document.getElementById('live-ticket-render');
+      showToast('Rendering Ticket to PNG image...', 'info');
+      html2canvas(ticket, { scale: 2.5, backgroundColor: null }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `BODHAI-TICKET-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('PNG Downloaded!', 'success');
+      });
+    }
+
+    function downloadLiveTicketPDF() {
+      const ticket = document.getElementById('live-ticket-render');
+      showToast('Compiling PDF Document...', 'info');
+      html2canvas(ticket, { scale: 2.5 }).then(canvas => {
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [195, 80] });
+        pdf.addImage(imgData, 'JPEG', 0, 0, 195, 80);
+        pdf.save(`BODHAI-CONCERT-PASS-${Date.now()}.pdf`);
+        showToast('PDF Exported!', 'success');
+      });
+    }
+
+    function printLiveTicket() {
+      const liveRender = document.getElementById('live-ticket-render');
+      const printArea = document.getElementById('print-ticket-area');
+      printArea.innerHTML = liveRender.outerHTML;
+      window.print();
+    }
+
+    function downloadSpecificTicketPNG(ticketId) {
+      viewTicketModal(ticketId);
+      setTimeout(() => {
+        const ticket = document.getElementById('modal-rendered-ticket');
+        if (!ticket) return;
+        html2canvas(ticket, { scale: 2.5, backgroundColor: null }).then(canvas => {
+          const link = document.createElement('a');
+          link.download = `${ticketId}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+          showToast(`Downloaded PNG for ${ticketId}`, 'success');
+        });
+      }, 300);
+    }
+
+    function downloadSpecificTicketPDF(ticketId) {
+      viewTicketModal(ticketId);
+      setTimeout(() => {
+        const ticket = document.getElementById('modal-rendered-ticket');
+        if (!ticket) return;
+        html2canvas(ticket, { scale: 2.5 }).then(canvas => {
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [195, 80] });
+          pdf.addImage(imgData, 'JPEG', 0, 0, 195, 80);
+          pdf.save(`${ticketId}.pdf`);
+          showToast(`PDF Exported for ${ticketId}`, 'success');
+        });
+      }, 300);
+    }
+
+    function printSpecificTicket(ticketId) {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (!ticket) return;
+
+      viewTicketModal(ticketId);
+      setTimeout(() => {
+        const modalTicket = document.getElementById('modal-rendered-ticket');
+        const printArea = document.getElementById('print-ticket-area');
+        printArea.innerHTML = modalTicket.outerHTML;
+        window.print();
+      }, 300);
+    }
+
+    function updateDashboardStats() {
+      const events = getStoredEvents();
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const attendees = JSON.parse(localStorage.getItem(STORAGE_KEYS.ATTENDEES) || '[]');
+
+      const totalEvents = events.length;
+      const totalTickets = tickets.length;
+      const verifiedTickets = tickets.filter(t => t.status === 'USED').length;
+      const activeTickets = tickets.filter(t => t.status === 'ACTIVE').length;
+      const totalRevenue = tickets.reduce((acc, t) => acc + (t.status !== 'CANCELLED' ? (t.price || 0) : 0), 0);
+      const turnoutRate = totalTickets > 0 ? Math.round((verifiedTickets / totalTickets) * 100) : 0;
+
+      // Update Header Badges & Stat Numbers
+      document.getElementById('stat-total-events').innerText = totalEvents;
+      document.getElementById('stat-total-tickets').innerText = totalTickets;
+      document.getElementById('stat-verified-tickets').innerText = verifiedTickets;
+      document.getElementById('stat-total-attendees').innerText = attendees.length;
+      document.getElementById('stat-total-revenue').innerText = `₹${totalRevenue.toLocaleString('en-IN')}`;
+      document.getElementById('stat-turnout-rate').innerText = `${turnoutRate}%`;
+
+      document.getElementById('badge-events-count').innerText = totalEvents;
+      document.getElementById('badge-tickets-count').innerText = totalTickets;
+      document.getElementById('badge-used-count').innerText = verifiedTickets;
+      document.getElementById('badge-active-count').innerText = activeTickets;
+
+      // Update Donut Progress SVG
+      const donut = document.getElementById('donut-progress-used');
+      const donutText = document.getElementById('donut-percent');
+      if (donut && donutText) {
+        donut.setAttribute('stroke-dasharray', `${turnoutRate}, 100`);
+        donutText.innerText = `${turnoutRate}%`;
+      }
+
+      // Update Dashboard Category Distribution Bars
+      const catCount = {};
+      tickets.forEach(t => {
+        catCount[t.category] = (catCount[t.category] || 0) + 1;
+      });
+
+      const catContainer = document.getElementById('category-bars-container');
+      if (catContainer) {
+        catContainer.innerHTML = Object.entries(catCount).map(([cat, count]) => {
+          const pct = Math.round((count / (totalTickets || 1)) * 100);
+          return `
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-white font-bold">${cat}</span>
+                <span class="text-slate-400">${count} passes (${pct}%)</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('') || '<p class="text-xs text-slate-500 font-mono">No tickets issued yet.</p>';
+      }
+
+      // Render Dashboard Featured Events Grid
+      const dashEventsGrid = document.getElementById('dashboard-events-grid');
+      if (dashEventsGrid) {
+        dashEventsGrid.innerHTML = events.slice(0, 3).map(ev => `
+          <div class="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden hover:border-cyan-500/40 transition">
+            <div class="h-32 relative overflow-hidden">
+              <img src="${ev.bannerImage}" class="w-full h-full object-cover">
+              <span class="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-black/70 text-cyan-300 border border-slate-700">
+                ${ev.city}
+              </span>
+            </div>
+            <div class="p-4 space-y-2">
+              <span class="text-[10px] font-mono text-cyan-400 uppercase font-bold">${ev.artist}</span>
+              <h4 class="font-bold text-white text-base truncate">${ev.name}</h4>
+              <p class="text-xs text-slate-400">${ev.date} • ${ev.startTime}</p>
+              <button onclick="selectEventForTicketGen('${ev.id}')" class="w-full mt-2 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-500 hover:text-black font-semibold text-xs transition">
+                Create Passes
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function updateAnalyticsView() {
+      const tickets = JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]');
+      const revenue = tickets.reduce((acc, t) => acc + (t.status !== 'CANCELLED' ? (t.price || 0) : 0), 0);
+      const used = tickets.filter(t => t.status === 'USED').length;
+      const cancelled = tickets.filter(t => t.status === 'CANCELLED').length;
+      const vipCount = tickets.filter(t => t.category.includes('VIP')).length;
+
+      document.getElementById('analytics-gross-revenue').innerText = `₹${revenue.toLocaleString('en-IN')}`;
+      document.getElementById('analytics-attendance-rate').innerText = `${tickets.length > 0 ? Math.round((used / tickets.length) * 100) : 0}%`;
+      document.getElementById('analytics-vip-share').innerText = `${tickets.length > 0 ? Math.round((vipCount / tickets.length) * 100) : 0}%`;
+      document.getElementById('analytics-cancelled-count').innerText = cancelled;
+
+      const summary = document.getElementById('analytics-summary-items');
+      if (summary) {
+        summary.innerHTML = `
+          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+            <span class="text-slate-300">Total Valid Active Inventory</span>
+            <span class="font-mono font-bold text-cyan-400">${tickets.filter(t => t.status === 'ACTIVE').length} Passes</span>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+            <span class="text-slate-300">Verified Turnstile Admissions</span>
+            <span class="font-mono font-bold text-emerald-400">${used} Attendees</span>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+            <span class="text-slate-300">Average Pass Value</span>
+            <span class="font-mono font-bold text-amber-400">₹${tickets.length > 0 ? Math.round(revenue / tickets.length) : 0}</span>
+          </div>
+        `;
+      }
+    }
+
+    function exportDatabaseJSON() {
+      const db = {
+        events: getStoredEvents(),
+        tickets: JSON.parse(localStorage.getItem(STORAGE_KEYS.TICKETS) || '[]'),
+        attendees: JSON.parse(localStorage.getItem(STORAGE_KEYS.ATTENDEES) || '[]'),
+        exportedAt: new Date().toISOString()
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `BODHAI-DATABASE-BACKUP-${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('Database exported to JSON file', 'success');
+    }
+
+    function importDatabaseJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const db = JSON.parse(e.target.result);
+          if (db.events && db.tickets) {
+            localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(db.events));
+            localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(db.tickets));
+            if (db.attendees) localStorage.setItem(STORAGE_KEYS.ATTENDEES, JSON.stringify(db.attendees));
+            initApp();
+            showToast('Database successfully restored from JSON backup', 'success');
+          } else {
+            showToast('Invalid backup file format', 'error');
+          }
+        } catch (err) {
+          showToast('Failed to parse JSON file', 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function resetFactoryDemoData() {
+      localStorage.removeItem(STORAGE_KEYS.EVENTS);
+      localStorage.removeItem(STORAGE_KEYS.TICKETS);
+      localStorage.removeItem(STORAGE_KEYS.ATTENDEES);
+      initApp();
+      showToast('Factory demo data re-initialized', 'info');
+      navigateTo('dashboard');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      let borderClass = 'border-cyan-500 bg-slate-900/95 text-cyan-300';
+      let icon = 'info';
+      if (type === 'success') {
+        borderClass = 'border-emerald-500 bg-slate-900/95 text-emerald-300';
+        icon = 'check-circle';
+      } else if (type === 'error') {
+        borderClass = 'border-rose-500 bg-slate-900/95 text-rose-300';
+        icon = 'alert-circle';
+      }
+
+      toast.className = `flex items-center gap-2.5 px-4 py-3 rounded-xl border shadow-2xl backdrop-blur text-xs font-mono transition-all transform duration-300 translate-y-2 opacity-0 pointer-events-auto ${borderClass}`;
+      toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4"></i> <span>${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function openModal(id) {
+      const modal = document.getElementById(id);
+      if (modal) modal.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeModal(id) {
+      const modal = document.getElementById(id);
+      if (modal) modal.classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
